@@ -1,0 +1,37 @@
+# Boots the Pi straight into HandWave, full-screen on the DSI display, with
+# no desktop or login prompt. Installed by deploy/install-pi.sh.
+[Unit]
+Description=HandWave synthesizer
+# Start as soon as the display and sound exist. Deliberately NOT after the
+# network: waiting for NetworkManager adds ~15 s to boot on a Pi 3. Touch may
+# appear a moment later; Qt (libinput) picks up hot-plugged input devices.
+Wants=dev-dri-card0.device
+After=dev-dri-card0.device sound.target systemd-udev-trigger.service
+# HandWave takes over tty1, so the login prompt must not run there.
+Conflicts=getty@tty1.service
+
+[Service]
+User=admin
+SupplementaryGroups=video render input audio
+WorkingDirectory=/opt/handwave
+ExecStart=/opt/handwave/bin/handwave
+
+# Qt: render with OpenGL ES straight to the display (KMS/DRM), no window system.
+Environment=QT_QPA_PLATFORM=eglfs
+Environment=QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+Environment=QT_QPA_EGLFS_KMS_CONFIG=/opt/handwave/kms.json
+Environment=QT_QPA_EGLFS_HIDECURSOR=1
+Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
+
+# Own tty1 so kernel/console text doesn't draw over the app.
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+# An instrument should come back if it crashes.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

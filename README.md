@@ -31,16 +31,34 @@ ctest --preset windows-mingw       # run unit tests (after a build)
 
 In VS Code (CMake Tools) or Qt Creator, open the folder and pick the **windows-mingw** preset.
 
-## Raspberry Pi (planned next step)
+## Raspberry Pi
 
-- Raspberry Pi OS Lite (Bookworm) with `dtoverlay=vc4-kms-v3d`.
-- `sudo apt install cmake g++ qt6-base-dev qt6-declarative-dev qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtqml-workerscript libasound2-dev`
-- `cmake --preset pi && cmake --build --preset pi`
-- Run full-screen without a desktop: `QT_QPA_PLATFORM=eglfs ./build/pi/handwave`
-- Kiosk boot: a systemd service that starts the app on boot, the tty1 getty disabled, quiet boot plus splash, and optionally a read-only root (overlayfs).
-- Audio: the Pi 3B+ 3.5 mm jack is noisy, so an I2S DAC HAT (PCM5102A / HiFiBerry DAC+) is recommended.
+Target: Raspberry Pi 3 A+ (512 MB) running **Raspberry Pi OS Lite 64-bit (trixie, Qt 6.8)**, with an
+800x480 DSI touch panel. The panel is auto-detected (`display_auto_detect=1`) and touch is an FT5x06.
 
-The code sticks to Qt 6.4 APIs because that's what Bookworm's apt provides.
+One-time setup on a fresh image (SSH in as `admin`):
+
+```sh
+sudo apt install --no-install-recommends cmake g++ make git pkg-config libasound2-dev   qt6-base-dev qt6-declarative-dev qt6-qpa-plugins qml6-module-qtquick qml6-module-qtquick-controls   qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window   qml6-module-qtqml-workerscript libgl-dev libegl-dev libgles-dev
+```
+
+Then copy the source to `~/HandWave` and run:
+
+```sh
+./deploy/install-pi.sh --kiosk     # build (-j1, ~4 min), install to /opt/handwave, boot into the app
+./deploy/install-pi.sh --no-kiosk  # undo: normal console login again
+journalctl -u handwave -f          # app logs
+```
+
+- **Kiosk boot:** [deploy/handwave.service](deploy/handwave.service) runs the app with Qt's `eglfs` backend
+  (OpenGL ES straight to the display, no desktop) on tty1, and restarts it if it crashes. The install script
+  also disables the tty1 login, quiets the kernel console, and disables cloud-init (Imager's first-boot tool).
+  The app is on screen about 12 s after the kernel starts.
+- **Display config:** [deploy/kms.json](deploy/kms.json) selects the DSI output and turns HDMI off.
+- **Audio:** the 3.5 mm jack (ALSA card 0) works but is noisy; an I2S DAC HAT (PCM5102A / HiFiBerry DAC+) is
+  the planned upgrade.
+
+The code still avoids APIs newer than Qt 6.4, so older images keep working.
 
 ## Roadmap
 QWERTY/MIDI notes and polyphony → drawn LFO → drawn envelope with ADSR markers → wave morphing (multi-frame tables, animated canvas) → CV out through an SPI DAC.
