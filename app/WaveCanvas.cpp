@@ -1,9 +1,12 @@
 #include "WaveCanvas.h"
 
+#include "ShapeEdits.h"
+
 #include <QMouseEvent>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometryNode>
 #include <QSGVertexColorMaterial>
+#include <QTouchEvent>
 #include <QtMath>
 
 #include <algorithm>
@@ -12,10 +15,14 @@
 namespace {
 
 // Children of the root node, in back-to-front order.
-enum NodeIndex { GridNode = 0, FillNode = 1, LineNode = 2 };
+enum NodeIndex { GridNode = 0, FillNode = 1, GhostNode = 2, LineNode = 3 };
 
 // Soft edge (in pixels) added on each side of the line for anti-aliasing.
 constexpr float kFeather = 1.0f;
+
+// If a second finger lands within this time of the first, the touch was meant
+// as a two-finger scroll, so the first finger's drawing is undone.
+constexpr qint64 kSecondFingerGraceMs = 200;
 
 // Colors for QSGVertexColorMaterial must be premultiplied by alpha.
 void setColoredVertex(QSGGeometry::ColoredPoint2D& v, float x, float y, const QColor& c, float alpha)
@@ -35,6 +42,76 @@ QSGGeometryNode* makeNode(QSGGeometry* geometry, QSGMaterial* material)
     return node;
 }
 
+QSGGeometry* makeRibbonGeometry()
+{
+    auto* g = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0, 0,
+                              QSGGeometry::UnsignedShortType);
+    g->setDrawingMode(QSGGeometry::DrawTriangles);
+    return g;
+}
+
+// Fill `g` with a thick, anti-aliased line through `p`.
+//
+// GPU line primitives can't reliably draw thick, smooth lines, so the line is
+// built as a ribbon of triangles. Each point gets 4 vertices across the line
+// (soft edge, solid, solid, soft edge), and neighbours are joined by 3 strips
+// of quads.
+void buildRibbon(QSGGeometry* g, const std::vector<QPointF>& p, float halfWidth,
+                 const QColor& color, float alpha)
+{
+    const int count = static_cast<int>(p.size());
+    if (count < 2) {
+        g->allocate(0, 0);
+        return;
+    }
+    const int vertexCount = 4 * count;
+    const int indexCount = 3 * 6 * (count - 1);
+    if (g->vertexCount() != vertexCount || g->indexCount() != indexCount)
+        g->allocate(vertexCount, indexCount);
+
+    auto segmentNormal = [&](int a, int b) {
+        const QPointF d = p[b] - p[a];
+        const qreal len = std::hypot(d.x(), d.y());
+        return len > 1e-6 ? QPointF(-d.y() / len, d.x() / len) : QPointF(0, 0);
+    };
+
+    auto* v = g->vertexDataAsColoredPoint2D();
+    for (int i = 0; i < count; ++i) {
+        // Mitre join: average the neighbouring segment normals and lengthen
+        // the offset so the line keeps its width at corners.
+        const QPointF n0 = segmentNormal(std::max(i - 1, 0), std::max(i, 1));
+        const QPointF n1 = segmentNormal(std::min(i, count - 2), std::min(i + 1, count - 1));
+        const QPointF reference = (n1.x() != 0 || n1.y() != 0) ? n1 : n0;
+        QPointF mitre = n0 + n1;
+        const qreal mitreLen = std::hypot(mitre.x(), mitre.y());
+        mitre = mitreLen > 1e-6 ? mitre / mitreLen : (reference.isNull() ? QPointF(0, -1) : reference);
+        const qreal dot = reference.isNull() ? 1.0 : mitre.x() * reference.x() + mitre.y() * reference.y();
+        const float scale = static_cast<float>(1.0 / std::max(dot, 0.35)); // cap spikes
+
+        const float inner = halfWidth * scale;
+        const float outer = (halfWidth + kFeather) * scale;
+        const float x = float(p[i].x()), y = float(p[i].y());
+        const float nx = float(mitre.x()), ny = float(mitre.y());
+        setColoredVertex(v[4 * i + 0], x - nx * outer, y - ny * outer, color, 0.0f);
+        setColoredVertex(v[4 * i + 1], x - nx * inner, y - ny * inner, color, alpha);
+        setColoredVertex(v[4 * i + 2], x + nx * inner, y + ny * inner, color, alpha);
+        setColoredVertex(v[4 * i + 3], x + nx * outer, y + ny * outer, color, 0.0f);
+    }
+
+    auto* idx = g->indexDataAsUShort();
+    int k = 0;
+    for (int i = 0; i < count - 1; ++i) {
+        for (int band = 0; band < 3; ++band) {
+            const auto a = static_cast<quint16>(4 * i + band);
+            const auto b = static_cast<quint16>(a + 1);
+            const auto c = static_cast<quint16>(a + 4);
+            const auto d = static_cast<quint16>(c + 1);
+            idx[k++] = a; idx[k++] = b; idx[k++] = c;
+            idx[k++] = b; idx[k++] = d; idx[k++] = c;
+        }
+    }
+}
+
 } // namespace
 
 WaveCanvas::WaveCanvas(QQuickItem* parent)
@@ -42,9 +119,10 @@ WaveCanvas::WaveCanvas(QQuickItem* parent)
     , points_(kPointCount, 0.0f)
 {
     setFlag(ItemHasContents, true);
-    // Touch input is turned into mouse events by Qt Quick, so one code path
-    // handles both the desktop mouse and the Pi's touchscreen.
-    setAcceptedMouseButtons(Qt::LeftButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
+    // Handle touch directly (rather than as synthesized mouse events) so we
+    // can tell one finger from two.
+    setAcceptTouchEvents(true);
     loadPreset(QStringLiteral("sine"));
 }
 
@@ -83,6 +161,8 @@ void WaveCanvas::setLineWidth(qreal width)
     emit appearanceChanged();
 }
 
+// ---- Actions ---------------------------------------------------------------
+
 void WaveCanvas::loadPreset(const QString& name)
 {
     const int last = kPointCount - 1;
@@ -108,6 +188,20 @@ void WaveCanvas::clear()
     shapeEdited();
 }
 
+void WaveCanvas::rotatePhase(int steps)
+{
+    if (steps == 0)
+        return;
+    hw::rotatePhase(points_, steps);
+    shapeEdited();
+}
+
+void WaveCanvas::joinEnds(qreal blendFraction)
+{
+    hw::joinEnds(points_, static_cast<float>(blendFraction));
+    shapeEdited();
+}
+
 void WaveCanvas::shapeEdited()
 {
     waveDirty_ = true;
@@ -119,30 +213,86 @@ void WaveCanvas::shapeEdited()
 
 void WaveCanvas::mousePressEvent(QMouseEvent* event)
 {
-    drawing_ = true;
-    lastIndex_ = -1;
-    drawTo(event->position());
+    if (event->button() == Qt::RightButton)
+        beginScroll(event->position().x());
+    else
+        beginDraw(event->position());
     event->accept();
 }
 
 void WaveCanvas::mouseMoveEvent(QMouseEvent* event)
 {
-    if (drawing_)
+    if (gesture_ == Gesture::Draw)
         drawTo(event->position());
+    else if (gesture_ == Gesture::Scroll)
+        scrollTo(event->position().x());
     event->accept();
 }
 
 void WaveCanvas::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (drawing_)
+    if (gesture_ == Gesture::Draw)
         drawTo(event->position());
-    drawing_ = false;
+    endGesture();
     event->accept();
 }
 
 void WaveCanvas::mouseUngrabEvent()
 {
-    drawing_ = false;
+    endGesture();
+}
+
+void WaveCanvas::touchEvent(QTouchEvent* event)
+{
+    if (event->type() == QEvent::TouchCancel) {
+        endGesture();
+        event->accept();
+        return;
+    }
+
+    // Fingers still on the screen, and their average x position.
+    int active = 0;
+    qreal sumX = 0.0;
+    QPointF single;
+    for (const QEventPoint& point : event->points()) {
+        if (point.state() == QEventPoint::Released)
+            continue;
+        ++active;
+        sumX += point.position().x();
+        single = point.position();
+    }
+
+    if (active >= 2) {
+        if (gesture_ != Gesture::Scroll)
+            beginScroll(sumX / active);
+        else
+            scrollTo(sumX / active);
+    } else if (active == 1 && gesture_ != Gesture::Scroll) {
+        // Once scrolling, stay in scroll mode until every finger lifts, so
+        // lifting one finger first doesn't draw a stray line.
+        if (gesture_ == Gesture::None)
+            beginDraw(single);
+        else
+            drawTo(single);
+    }
+
+    if (event->type() == QEvent::TouchEnd)
+        endGesture();
+    event->accept();
+}
+
+void WaveCanvas::touchUngrabEvent()
+{
+    endGesture();
+}
+
+void WaveCanvas::beginDraw(const QPointF& position)
+{
+    gesture_ = Gesture::Draw;
+    strokeSnapshot_ = points_;
+    strokeTimer_.start();
+    lastIndex_ = -1;
+    drawTo(position);
 }
 
 void WaveCanvas::drawTo(const QPointF& position)
@@ -173,6 +323,37 @@ void WaveCanvas::drawTo(const QPointF& position)
     shapeEdited();
 }
 
+void WaveCanvas::beginScroll(qreal x)
+{
+    if (gesture_ == Gesture::Draw && strokeTimer_.isValid()
+        && strokeTimer_.elapsed() < kSecondFingerGraceMs) {
+        points_ = strokeSnapshot_;
+        shapeEdited();
+    }
+    gesture_ = Gesture::Scroll;
+    scrollAnchorX_ = x;
+}
+
+void WaveCanvas::scrollTo(qreal x)
+{
+    const qreal pixelsPerPoint = plotArea().width() / (kPointCount - 1);
+    if (pixelsPerPoint <= 0)
+        return;
+    // Move by whole points only, carrying the remainder, so the drawing tracks
+    // the finger exactly however slowly it moves.
+    const int steps = static_cast<int>((x - scrollAnchorX_) / pixelsPerPoint);
+    if (steps != 0) {
+        rotatePhase(steps);
+        scrollAnchorX_ += steps * pixelsPerPoint;
+    }
+}
+
+void WaveCanvas::endGesture()
+{
+    gesture_ = Gesture::None;
+    strokeTimer_.invalidate();
+}
+
 // ---- Rendering -------------------------------------------------------------
 
 void WaveCanvas::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry)
@@ -186,9 +367,11 @@ void WaveCanvas::geometryChange(const QRectF& newGeometry, const QRectF& oldGeom
 
 QRectF WaveCanvas::plotArea() const
 {
-    // Inset so a full-scale value's line isn't clipped at the edge.
+    // Inset so a full-scale value's line isn't clipped at the edge, and leave
+    // room on the right for the ghost of the next cycle.
     const qreal inset = lineWidth_ + kFeather;
-    return QRectF(0, inset, width(), std::max<qreal>(0, height() - 2 * inset));
+    return QRectF(0, inset, width() / (1.0 + kGhostFraction),
+                  std::max<qreal>(0, height() - 2 * inset));
 }
 
 qreal WaveCanvas::valueToY(float value, const QRectF& area) const
@@ -214,29 +397,26 @@ QSGNode* WaveCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         fillGeometry->setDrawingMode(QSGGeometry::DrawTriangleStrip);
         root->appendChildNode(makeNode(fillGeometry, new QSGVertexColorMaterial));
 
-        // The curve itself: a ribbon of triangles. GPU line primitives can't
-        // reliably draw thick, smooth lines, so this builds the thickness and
-        // the anti-aliased edges as geometry.
-        auto* lineGeometry = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(),
-                                             0, 0, QSGGeometry::UnsignedShortType);
-        lineGeometry->setDrawingMode(QSGGeometry::DrawTriangles);
-        root->appendChildNode(makeNode(lineGeometry, new QSGVertexColorMaterial));
+        root->appendChildNode(makeNode(makeRibbonGeometry(), new QSGVertexColorMaterial)); // ghost
+        root->appendChildNode(makeNode(makeRibbonGeometry(), new QSGVertexColorMaterial)); // line
 
         gridDirty_ = waveDirty_ = true;
     }
 
     const QRectF area = plotArea();
+    const float halfWidth = static_cast<float>(lineWidth_ * 0.5);
 
     if (gridDirty_) {
         auto* node = static_cast<QSGGeometryNode*>(root->childAtIndex(GridNode));
         static_cast<QSGFlatColorMaterial*>(node->material())->setColor(gridColor_);
 
-        // Vertical lines at quarter-cycles, horizontal lines at -1, -0.5, 0, 0.5, 1.
+        // Vertical lines at quarter-cycles plus the seam at the right edge;
+        // horizontal lines at -1, -0.5, 0, 0.5, 1.
         QSGGeometry* g = node->geometry();
-        g->allocate(2 * (3 + 5));
+        g->allocate(2 * (4 + 5));
         auto* v = g->vertexDataAsPoint2D();
         int n = 0;
-        for (int i = 1; i <= 3; ++i) {
+        for (int i = 1; i <= 4; ++i) {
             const float x = static_cast<float>(area.left() + area.width() * i / 4.0);
             v[n++].set(x, static_cast<float>(area.top()));
             v[n++].set(x, static_cast<float>(area.bottom()));
@@ -251,11 +431,12 @@ QSGNode* WaveCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     }
 
     if (waveDirty_) {
+        const qreal dx = area.width() / (kPointCount - 1);
+
         // Screen positions of every point.
         std::vector<QPointF> p(kPointCount);
         for (int i = 0; i < kPointCount; ++i)
-            p[i] = QPointF(area.left() + area.width() * i / (kPointCount - 1),
-                           valueToY(points_[i], area));
+            p[i] = QPointF(area.left() + dx * i, valueToY(points_[i], area));
         const float zeroY = static_cast<float>(valueToY(0.0f, area));
 
         // Fill: one vertex on the curve, one on the zero line, per point.
@@ -272,56 +453,26 @@ QSGNode* WaveCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             node->markDirty(QSGNode::DirtyGeometry);
         }
 
-        // Line ribbon: 4 vertices across each point (soft edge, solid, solid,
-        // soft edge), joined into 3 strips of quads between neighbours.
+        // Ghost: from the end of this cycle, (jump to) the start of the next one.
+        {
+            const int ghostPoints = qRound(kGhostFraction * (kPointCount - 1));
+            std::vector<QPointF> ghost;
+            ghost.reserve(ghostPoints + 2);
+            ghost.push_back(p.back());
+            const QPointF nextStart(area.right(), p.front().y());
+            if (std::abs(nextStart.y() - p.back().y()) > 0.5) // the seam jump, if any
+                ghost.push_back(nextStart);
+            for (int i = 1; i <= ghostPoints; ++i)
+                ghost.emplace_back(area.right() + dx * i, p[i].y());
+
+            auto* node = static_cast<QSGGeometryNode*>(root->childAtIndex(GhostNode));
+            buildRibbon(node->geometry(), ghost, halfWidth, lineColor_, 0.35f);
+            node->markDirty(QSGNode::DirtyGeometry);
+        }
+
         {
             auto* node = static_cast<QSGGeometryNode*>(root->childAtIndex(LineNode));
-            QSGGeometry* g = node->geometry();
-            const int vertexCount = 4 * kPointCount;
-            const int indexCount = 3 * 6 * (kPointCount - 1);
-            if (g->vertexCount() != vertexCount || g->indexCount() != indexCount)
-                g->allocate(vertexCount, indexCount);
-
-            const float halfWidth = static_cast<float>(lineWidth_ * 0.5);
-            auto* v = g->vertexDataAsColoredPoint2D();
-            auto segmentNormal = [&](int a, int b) {
-                const QPointF d = p[b] - p[a];
-                const qreal len = std::hypot(d.x(), d.y());
-                return len > 0 ? QPointF(-d.y() / len, d.x() / len) : QPointF(0, -1);
-            };
-            for (int i = 0; i < kPointCount; ++i) {
-                // Mitre join: average the neighbouring segment normals and
-                // lengthen the offset so the line keeps its width at corners.
-                const QPointF n0 = segmentNormal(std::max(i - 1, 0), std::max(i, 1));
-                const QPointF n1 = segmentNormal(std::min(i, kPointCount - 2), std::min(i + 1, kPointCount - 1));
-                QPointF mitre = n0 + n1;
-                const qreal mitreLen = std::hypot(mitre.x(), mitre.y());
-                mitre = mitreLen > 1e-6 ? mitre / mitreLen : n1;
-                const qreal dot = mitre.x() * n1.x() + mitre.y() * n1.y();
-                const float scale = static_cast<float>(1.0 / std::max(dot, 0.35)); // cap spikes
-
-                const float inner = halfWidth * scale;
-                const float outer = (halfWidth + kFeather) * scale;
-                const float x = float(p[i].x()), y = float(p[i].y());
-                const float nx = float(mitre.x()), ny = float(mitre.y());
-                setColoredVertex(v[4 * i + 0], x - nx * outer, y - ny * outer, lineColor_, 0.0f);
-                setColoredVertex(v[4 * i + 1], x - nx * inner, y - ny * inner, lineColor_, 1.0f);
-                setColoredVertex(v[4 * i + 2], x + nx * inner, y + ny * inner, lineColor_, 1.0f);
-                setColoredVertex(v[4 * i + 3], x + nx * outer, y + ny * outer, lineColor_, 0.0f);
-            }
-
-            auto* idx = g->indexDataAsUShort();
-            int k = 0;
-            for (int i = 0; i < kPointCount - 1; ++i) {
-                for (int band = 0; band < 3; ++band) {
-                    const auto a = static_cast<quint16>(4 * i + band);
-                    const auto b = static_cast<quint16>(a + 1);
-                    const auto c = static_cast<quint16>(a + 4);
-                    const auto d = static_cast<quint16>(c + 1);
-                    idx[k++] = a; idx[k++] = b; idx[k++] = c;
-                    idx[k++] = b; idx[k++] = d; idx[k++] = c;
-                }
-            }
+            buildRibbon(node->geometry(), p, halfWidth, lineColor_, 1.0f);
             node->markDirty(QSGNode::DirtyGeometry);
         }
         waveDirty_ = false;

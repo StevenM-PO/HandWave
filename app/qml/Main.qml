@@ -19,9 +19,24 @@ ApplicationWindow {
     readonly property color control: "#232a35"
     readonly property color textColor: "#d8dee9"
 
+    // Phase moves in 1/64ths of a cycle per click (8 of the canvas's 511
+    // points); Shift gives single-point fine steps.
+    readonly property int phaseStep: 8
+    // Join bends this fraction of the cycle around the seam.
+    readonly property real joinBlend: 0.05
+
     SynthController {
         id: synth
     }
+
+    // ---- Keyboard: desktop stand-ins for hardware encoders and switches ----
+    // The GPIO controls on the Pi will call these same canvas actions.
+    Shortcut { sequence: "]";       autoRepeat: true; onActivated: canvas.rotatePhase(window.phaseStep) }
+    Shortcut { sequence: "[";       autoRepeat: true; onActivated: canvas.rotatePhase(-window.phaseStep) }
+    Shortcut { sequences: ["}", "Shift+]"]; autoRepeat: true; onActivated: canvas.rotatePhase(1) }
+    Shortcut { sequences: ["{", "Shift+["]; autoRepeat: true; onActivated: canvas.rotatePhase(-1) }
+    Shortcut { sequence: "J";       onActivated: canvas.joinEnds(window.joinBlend) }
+    Shortcut { sequence: "Space";   onActivated: synth.holding = !synth.holding }
 
     // Large touch-friendly button used throughout the bar below.
     component PadButton: Button {
@@ -92,6 +107,21 @@ ApplicationWindow {
             PadButton { text: "Clear";    onClicked: canvas.clear() }
 
             Item { Layout.fillWidth: true }
+
+            // Touch stand-ins for a phase encoder and a "join" switch.
+            PadButton {
+                text: "◀"
+                implicitWidth: 48
+                autoRepeat: true
+                onClicked: canvas.rotatePhase(-window.phaseStep)
+            }
+            PadButton {
+                text: "▶"
+                implicitWidth: 48
+                autoRepeat: true
+                onClicked: canvas.rotatePhase(window.phaseStep)
+            }
+            PadButton { text: "Join"; onClicked: canvas.joinEnds(window.joinBlend) }
 
             PadButton {
                 text: synth.holding ? "Holding" : "Hold"

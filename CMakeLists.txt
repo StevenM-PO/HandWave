@@ -16,6 +16,8 @@ add_library(handwave_core STATIC
     core/Fft.cpp
     core/Fft.h
     core/ParamSmoother.h
+    core/ShapeEdits.cpp
+    core/ShapeEdits.h
     core/SpscQueue.h
     core/Wavetable.h
     core/WavetableBuilder.cpp
@@ -90,6 +92,7 @@ if(HANDWAVE_BUILD_TESTS)
     add_executable(handwave_tests
         tests/test_builder.cpp
         tests/test_oscillator.cpp
+        tests/test_shape_edits.cpp
     )
     target_link_libraries(handwave_tests PRIVATE handwave_audio Catch2::Catch2WithMain)
     if(MINGW)
