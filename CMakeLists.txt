@@ -13,6 +13,9 @@ option(HANDWAVE_BUILD_TESTS "Build the core unit tests"      ON)
 # LFO / envelope.
 # ---------------------------------------------------------------------------
 add_library(handwave_core STATIC
+    core/Biquad.h
+    core/DrawnFilter.cpp
+    core/DrawnFilter.h
     core/Fft.cpp
     core/Fft.h
     core/ParamSmoother.h
@@ -54,16 +57,30 @@ if(HANDWAVE_BUILD_APP)
 
     qt_add_executable(handwave app/main.cpp)
 
-    set_source_files_properties(app/qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
+    # QML files sit at the module root (qrc:/HandWave/<name>.qml).
+    set(HANDWAVE_QML Main.qml Theme.qml PadButton.qml OscillatorPage.qml FilterPage.qml)
+    list(TRANSFORM HANDWAVE_QML PREPEND app/qml/ OUTPUT_VARIABLE HANDWAVE_QML_PATHS)
+    foreach(path IN LISTS HANDWAVE_QML_PATHS)
+        get_filename_component(name ${path} NAME)
+        set_source_files_properties(${path} PROPERTIES QT_RESOURCE_ALIAS ${name})
+    endforeach()
+    set_source_files_properties(app/qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
     qt_add_qml_module(handwave
         URI HandWave
         VERSION 1.0
         RESOURCE_PREFIX /
         QML_FILES
-            app/qml/Main.qml
+            ${HANDWAVE_QML_PATHS}
         SOURCES
             app/ControlSurface.cpp
             app/ControlSurface.h
+            app/CurveCanvas.cpp
+            app/CurveCanvas.h
+            app/FilterCanvas.cpp
+            app/FilterCanvas.h
+            app/SceneGraphHelpers.cpp
+            app/SceneGraphHelpers.h
             app/SynthController.cpp
             app/SynthController.h
             app/WaveCanvas.cpp
@@ -93,6 +110,7 @@ if(HANDWAVE_BUILD_TESTS)
 
     add_executable(handwave_tests
         tests/test_builder.cpp
+        tests/test_drawn_filter.cpp
         tests/test_oscillator.cpp
         tests/test_shape_edits.cpp
     )

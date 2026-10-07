@@ -15,6 +15,8 @@ User=admin
 SupplementaryGroups=video render input audio
 WorkingDirectory=/opt/handwave
 ExecStart=/opt/handwave/bin/handwave
+# Let the audio thread run at real-time priority (miniaudio requests 80).
+LimitRTPRIO=80
 
 # Qt: render with OpenGL ES straight to the display (KMS/DRM), no window system.
 Environment=QT_QPA_PLATFORM=eglfs

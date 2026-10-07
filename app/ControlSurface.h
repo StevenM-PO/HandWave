@@ -22,6 +22,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcInput)
 //            digit held, the knob is encoder 1.
 //   - later: GPIO encoders/switches via the kernel's rotary-encoder and
 //            gpio-key drivers, calling turnEncoder()/pressEncoder()/pressSwitch().
+// Keyboard switches: Space = 1, J = 2, Tab = 3.
 //
 // Enable `handwave.input.debug` logging to see every raw key and mapped event.
 class ControlSurface : public QObject {

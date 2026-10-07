@@ -144,6 +144,10 @@ bool ControlSurface::handleKey(const QKeyEvent* event, bool pressed)
         if (pressed && !repeat)
             pressSwitch(2);
         return true;
+    case Qt::Key_Tab:
+        if (pressed && !repeat)
+            pressSwitch(3);
+        return true;
     default:
         return false;
     }
