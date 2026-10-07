@@ -48,6 +48,9 @@ protected:
     // Curve position (0..1 along the points) under a plot position (0..1
     // across the plot), or nothing if no part of the curve is shown there.
     virtual std::optional<double> curvePositionAt(double plotX) const { return plotX; }
+    // True if the curve wraps around (its last point meets its first), so
+    // strokes may cross the seam.
+    virtual bool isPeriodic() const { return false; }
     // Points firstIndex..lastIndex were just changed by a stroke.
     virtual void strokeEdited(int /*firstIndex*/, int /*lastIndex*/) {}
     // Two-finger / right-button sideways drag.

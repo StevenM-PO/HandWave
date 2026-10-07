@@ -30,4 +30,14 @@ void rotatePhase(std::vector<float>& points, int steps);
 // unchanged.
 void joinEnds(std::vector<float>& points, float blendFraction);
 
+// One step of a drawing stroke: a straight line from point `from` (value
+// `fromValue`, already drawn) to point `to` (value `toValue`), filling every
+// point it passes so fast strokes leave no gaps. Returns the indices written.
+//
+// `periodic`: the curve wraps, its last point sitting at the same place as its
+// first (a looped display). The line then takes the shorter way around, across
+// the seam if need be, and keeps both seam points equal.
+std::vector<int> drawStrokeSegment(std::vector<float>& points, int from, float fromValue,
+                                   int to, float toValue, bool periodic);
+
 } // namespace hw

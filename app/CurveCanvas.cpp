@@ -1,5 +1,7 @@
 #include "CurveCanvas.h"
 
+#include "ShapeEdits.h"
+
 #include <QMouseEvent>
 #include <QTouchEvent>
 
@@ -189,29 +191,20 @@ void CurveCanvas::drawTo(const QPointF& position)
         return;
     }
 
-    const int count = int(points_.size());
-    const int last = count - 1;
+    const int last = int(points_.size()) - 1;
     const int index = std::clamp(int(std::lround(*curveX * last)), 0, last);
     const float value = yToValue(position.y(), area);
 
     // A fast stroke skips columns between two events: fill them with a
-    // straight line. A jump of over half the curve can only be a wrap-around
-    // (looped display), which must not be filled across.
-    int first = index;
-    if (lastIndex_ < 0 || lastIndex_ == index || std::abs(index - lastIndex_) > count / 2) {
-        points_[index] = value;
-    } else {
-        const int step = index > lastIndex_ ? 1 : -1;
-        const int span = std::abs(index - lastIndex_);
-        for (int k = 1; k <= span; ++k) {
-            const float t = static_cast<float>(k) / span;
-            points_[lastIndex_ + k * step] = lastValue_ + (value - lastValue_) * t;
-        }
-        first = lastIndex_;
-    }
+    // straight line (across the seam on a looped curve).
+    const bool startOfStroke = lastIndex_ < 0;
+    const std::vector<int> written =
+        hw::drawStrokeSegment(points_, startOfStroke ? index : lastIndex_, startOfStroke ? value : lastValue_,
+                              index, value, isPeriodic());
     lastIndex_ = index;
     lastValue_ = value;
-    strokeEdited(std::min(first, index), std::max(first, index));
+    for (int i : written)
+        strokeEdited(i, i);
     shapeEdited();
 }
 

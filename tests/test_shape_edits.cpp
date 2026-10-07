@@ -132,3 +132,41 @@ TEST_CASE("Edits cope with degenerate input")
     joinEnds(p, 5.0f); // absurd fraction is clamped to half the cycle per side
     REQUIRE(p.front() == Catch::Approx(p.back()));
 }
+
+TEST_CASE("Stroke segments fill every point they pass")
+{
+    std::vector<float> p(kCount, -1.0f);
+
+    // Non-periodic: a fast swipe over more than half the curve is filled
+    // straight across (it used to be mistaken for a wrap and left a gap).
+    auto written = drawStrokeSegment(p, 10, 0.0f, 400, 1.0f, false);
+    REQUIRE(written.size() == 390);
+    for (int i = 11; i <= 400; ++i)
+        REQUIRE(p[i] == Catch::Approx((i - 10) / 390.0f));
+    REQUIRE(p[5] == -1.0f); // untouched outside the segment
+
+    // A single point (start of a stroke) writes just that point.
+    written = drawStrokeSegment(p, 3, 0.5f, 3, 0.5f, false);
+    REQUIRE(written == std::vector<int>{3});
+    REQUIRE(p[3] == 0.5f);
+}
+
+TEST_CASE("On a looped curve, strokes cross the seam the short way round")
+{
+    std::vector<float> p(kCount, -1.0f); // e.g. the -48 dB tail of an old low-pass
+    const int last = kCount - 1;
+
+    // From just before the end, across the seam, to just after the start.
+    drawStrokeSegment(p, last - 4, 0.2f, 4, 0.2f, true);
+    for (int i : {last - 3, last - 2, last - 1, last, 0, 1, 2, 3, 4})
+        REQUIRE(p[i] == Catch::Approx(0.2f)); // no stale points left at the seam
+    REQUIRE(p[last] == p[0]);
+    REQUIRE(p[100] == -1.0f); // didn't go the long way round
+
+    // And backwards.
+    std::vector<float> q(kCount, -1.0f);
+    drawStrokeSegment(q, 3, 0.7f, last - 3, 0.7f, true);
+    for (int i : {2, 1, 0, last, last - 1, last - 2, last - 3})
+        REQUIRE(q[i] == Catch::Approx(0.7f));
+    REQUIRE(q[200] == -1.0f);
+}

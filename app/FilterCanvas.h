@@ -66,6 +66,7 @@ signals:
 protected:
     QRectF plotArea() const override;
     std::optional<double> curvePositionAt(double plotX) const override;
+    bool isPeriodic() const override { return settings_.loop; }
     void strokeEdited(int firstIndex, int lastIndex) override;
     void scrollByPixels(qreal dx) override;
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;

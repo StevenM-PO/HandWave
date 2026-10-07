@@ -45,4 +45,42 @@ void joinEnds(std::vector<float>& points, float blendFraction)
     }
 }
 
+std::vector<int> drawStrokeSegment(std::vector<float>& points, int from, float fromValue,
+                                   int to, float toValue, bool periodic)
+{
+    std::vector<int> written;
+    const int n = static_cast<int>(points.size());
+    if (n < 2)
+        return written;
+
+    // Index distance to travel. On a periodic curve the last point repeats the
+    // first, so one lap is n - 1 steps; going over half a lap means the other
+    // way round (across the seam) is shorter.
+    const int lap = n - 1;
+    int delta = to - from;
+    if (periodic) {
+        if (delta > lap / 2)
+            delta -= lap;
+        else if (delta < -lap / 2)
+            delta += lap;
+    }
+
+    const int span = std::abs(delta);
+    const int step = delta >= 0 ? 1 : -1;
+    for (int k = (span == 0 ? 0 : 1); k <= span; ++k) {
+        const float t = span == 0 ? 1.0f : static_cast<float>(k) / span;
+        const float value = fromValue + (toValue - fromValue) * t;
+        int index = from + k * step;
+        if (periodic)
+            index = ((index % lap) + lap) % lap;
+        points[index] = value;
+        written.push_back(index);
+        if (periodic && index == 0) { // the seam: first and last points coincide
+            points[lap] = value;
+            written.push_back(lap);
+        }
+    }
+    return written;
+}
+
 } // namespace hw
