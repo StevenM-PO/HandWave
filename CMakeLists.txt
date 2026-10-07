@@ -62,6 +62,8 @@ if(HANDWAVE_BUILD_APP)
         QML_FILES
             app/qml/Main.qml
         SOURCES
+            app/ControlSurface.cpp
+            app/ControlSurface.h
             app/SynthController.cpp
             app/SynthController.h
             app/WaveCanvas.cpp

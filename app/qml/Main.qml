@@ -19,24 +19,66 @@ ApplicationWindow {
     readonly property color control: "#232a35"
     readonly property color textColor: "#d8dee9"
 
-    // Phase moves in 1/64ths of a cycle per click (8 of the canvas's 511
-    // points); Shift gives single-point fine steps.
+    // Phase moves in 1/64ths of a cycle per encoder detent or button click
+    // (8 of the canvas's 511 points).
     readonly property int phaseStep: 8
     // Join bends this fraction of the cycle around the seam.
     readonly property real joinBlend: 0.05
+    readonly property real volumeStep: 0.02
+    // Volume to restore when un-muting; negative when not muted.
+    property real mutedVolume: -1
 
     SynthController {
         id: synth
     }
 
-    // ---- Keyboard: desktop stand-ins for hardware encoders and switches ----
-    // The GPIO controls on the Pi will call these same canvas actions.
-    Shortcut { sequence: "]";       autoRepeat: true; onActivated: canvas.rotatePhase(window.phaseStep) }
-    Shortcut { sequence: "[";       autoRepeat: true; onActivated: canvas.rotatePhase(-window.phaseStep) }
-    Shortcut { sequences: ["}", "Shift+]"]; autoRepeat: true; onActivated: canvas.rotatePhase(1) }
-    Shortcut { sequences: ["{", "Shift+["]; autoRepeat: true; onActivated: canvas.rotatePhase(-1) }
-    Shortcut { sequence: "J";       onActivated: canvas.joinEnds(window.joinBlend) }
-    Shortcut { sequence: "Space";   onActivated: synth.holding = !synth.holding }
+    // ---- Hardware controls (keyboard-simulated for now, GPIO later) ----
+    // This block is the control map for this page. Encoder N = hold digit N
+    // while turning/pressing the knob (or [ ] Enter); bare knob = encoder 1.
+    ControlSurface {
+        id: controls
+
+        onEncoderTurned: (encoder, steps) => {
+            switch (encoder) {
+            case 1: // phase
+                canvas.rotatePhase(steps * window.phaseStep)
+                break
+            case 2: // pitch, in semitones
+                synth.frequency = synth.frequency * Math.pow(2, steps / 12)
+                break
+            case 3: // volume (turning cancels mute)
+                const base = window.mutedVolume >= 0 ? 0 : synth.volume
+                window.mutedVolume = -1
+                synth.volume = base + steps * window.volumeStep
+                break
+            }
+        }
+
+        onEncoderPressed: (encoder) => {
+            switch (encoder) {
+            case 1: canvas.joinEnds(window.joinBlend); break
+            case 2: synth.holding = !synth.holding; break
+            case 3: window.toggleMute(); break
+            }
+        }
+
+        onSwitchPressed: (sw) => {
+            switch (sw) {
+            case 1: synth.holding = !synth.holding; break
+            case 2: canvas.joinEnds(window.joinBlend); break
+            }
+        }
+    }
+
+    function toggleMute() {
+        if (mutedVolume >= 0) {
+            synth.volume = mutedVolume
+            mutedVolume = -1
+        } else {
+            mutedVolume = synth.volume
+            synth.volume = 0
+        }
+    }
 
     // Large touch-friendly button used throughout the bar below.
     component PadButton: Button {
@@ -126,9 +168,10 @@ ApplicationWindow {
             PadButton {
                 text: synth.holding ? "Holding" : "Hold"
                 implicitWidth: 120
-                checkable: true
+                // Not checkable: clicking would overwrite `checked` and break
+                // this binding, so encoder/switch changes would stop showing.
                 checked: synth.holding
-                onToggled: synth.holding = checked
+                onClicked: synth.holding = !synth.holding
             }
         }
 
@@ -144,8 +187,14 @@ ApplicationWindow {
                 // Logarithmic: 0..1 maps to 20 Hz .. 2 kHz so each octave
                 // takes the same slider distance.
                 from: 0; to: 1
-                value: Math.log(synth.frequency / 20) / Math.log(100)
                 onMoved: synth.frequency = 20 * Math.pow(100, value)
+                // Follow pitch changes from elsewhere (encoders). A plain
+                // `value:` binding would break the first time the slider is dragged.
+                Binding on value {
+                    when: !pitchSlider.pressed
+                    value: Math.log(synth.frequency / 20) / Math.log(100)
+                    restoreMode: Binding.RestoreNone
+                }
             }
             Text {
                 text: Math.round(synth.frequency) + " Hz  " + window.noteName(synth.frequency)
@@ -156,10 +205,18 @@ ApplicationWindow {
 
             Text { text: "Volume"; color: window.textColor; font.pixelSize: 15 }
             Slider {
+                id: volumeSlider
                 Layout.preferredWidth: 160
                 from: 0; to: 1
-                value: synth.volume
-                onMoved: synth.volume = value
+                onMoved: {
+                    window.mutedVolume = -1
+                    synth.volume = value
+                }
+                Binding on value {
+                    when: !volumeSlider.pressed
+                    value: synth.volume
+                    restoreMode: Binding.RestoreNone
+                }
             }
         }
     }
