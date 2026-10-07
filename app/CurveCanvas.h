@@ -55,6 +55,12 @@ protected:
     virtual void strokeEdited(int /*firstIndex*/, int /*lastIndex*/) {}
     // Two-finger / right-button sideways drag.
     virtual void scrollByPixels(qreal dx) = 0;
+    // A one-finger / left press can be claimed for dragging something (a
+    // handle) instead of drawing: return true to get customDragTo() calls
+    // and a final endCustomDrag().
+    virtual bool beginCustomDrag(const QPointF& /*position*/) { return false; }
+    virtual void customDragTo(const QPointF& /*position*/) {}
+    virtual void endCustomDrag() {}
 
     // Call after changing points_: redraws and notifies.
     void shapeEdited();
@@ -83,9 +89,10 @@ protected:
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
 private:
-    enum class Gesture { None, Draw, Scroll };
+    enum class Gesture { None, Draw, Scroll, Custom };
 
     void beginDraw(const QPointF& position);
+    void moveTo(const QPointF& position); // continue a draw or custom drag
     void drawTo(const QPointF& position);
     void beginScroll(qreal x);
     void scrollTo(qreal x);

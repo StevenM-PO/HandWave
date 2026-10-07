@@ -7,6 +7,7 @@ import HandWave
 Item {
     id: page
     required property SynthController synth
+    property string title: "OSC"
     // For tools and tests (main.cpp --eval) to reach the drawing surface.
     property alias canvas: canvas
 
@@ -42,6 +43,7 @@ Item {
         case 1: canvas.joinEnds(joinBlend); break
         case 2: synth.holding = !synth.holding; break
         case 3: toggleMute(); break
+        default: break
         }
     }
 
@@ -113,21 +115,25 @@ Item {
 
             PadButton {
                 text: "◀"
-                implicitWidth: 48
+                implicitWidth: 44
                 autoRepeat: true
                 onClicked: canvas.rotatePhase(-page.phaseStep)
             }
             PadButton {
                 text: "▶"
-                implicitWidth: 48
+                implicitWidth: 44
                 autoRepeat: true
                 onClicked: canvas.rotatePhase(page.phaseStep)
             }
-            PadButton { text: "Join"; onClicked: canvas.joinEnds(page.joinBlend) }
+            PadButton { text: "Join"; implicitWidth: 64; onClicked: canvas.joinEnds(page.joinBlend) }
 
             PadButton {
-                text: page.synth.holding ? "Holding" : "Hold"
-                implicitWidth: 120
+                text: "Play"
+                checked: pressed
+                onPressedChanged: page.synth.playing = pressed
+            }
+            PadButton {
+                text: "Hold"
                 checked: page.synth.holding
                 onClicked: page.synth.holding = !page.synth.holding
             }

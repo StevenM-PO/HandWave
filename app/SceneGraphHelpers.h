@@ -29,8 +29,8 @@ void buildRibbons(QSGGeometry* g, const std::vector<Polyline>& lines, float half
                   const QColor& color, float alpha);
 // A soft gradient from each polyline (at `alpha`) down/up to `baselineY` (transparent).
 void buildFill(QSGGeometry* g, const Polyline& line, float baselineY, const QColor& color, float alpha);
-// A filled, anti-aliased dot.
-void buildDot(QSGGeometry* g, QPointF centre, float radius, const QColor& color);
+// Filled, anti-aliased dots (none if `centres` is empty).
+void buildDots(QSGGeometry* g, const std::vector<QPointF>& centres, float radius, const QColor& color);
 // Straight segments: each pair of points is one line.
 void buildLines(QSGGeometry* g, const std::vector<QPointF>& endpoints);
 

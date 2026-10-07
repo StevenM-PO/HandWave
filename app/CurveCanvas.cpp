@@ -105,17 +105,16 @@ void CurveCanvas::mousePressEvent(QMouseEvent* event)
 
 void CurveCanvas::mouseMoveEvent(QMouseEvent* event)
 {
-    if (gesture_ == Gesture::Draw)
-        drawTo(event->position());
-    else if (gesture_ == Gesture::Scroll)
+    if (gesture_ == Gesture::Scroll)
         scrollTo(event->position().x());
+    else
+        moveTo(event->position());
     event->accept();
 }
 
 void CurveCanvas::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (gesture_ == Gesture::Draw)
-        drawTo(event->position());
+    moveTo(event->position());
     endGesture();
     event->accept();
 }
@@ -156,7 +155,7 @@ void CurveCanvas::touchEvent(QTouchEvent* event)
         if (gesture_ == Gesture::None)
             beginDraw(single);
         else
-            drawTo(single);
+            moveTo(single);
     }
 
     if (event->type() == QEvent::TouchEnd)
@@ -171,11 +170,23 @@ void CurveCanvas::touchUngrabEvent()
 
 void CurveCanvas::beginDraw(const QPointF& position)
 {
+    if (beginCustomDrag(position)) {
+        gesture_ = Gesture::Custom;
+        return;
+    }
     gesture_ = Gesture::Draw;
     strokeSnapshot_ = points_;
     strokeTimer_.start();
     lastIndex_ = -1;
     drawTo(position);
+}
+
+void CurveCanvas::moveTo(const QPointF& position)
+{
+    if (gesture_ == Gesture::Draw)
+        drawTo(position);
+    else if (gesture_ == Gesture::Custom)
+        customDragTo(position);
 }
 
 void CurveCanvas::drawTo(const QPointF& position)
@@ -215,6 +226,8 @@ void CurveCanvas::beginScroll(qreal x)
         points_ = strokeSnapshot_;
         shapeEdited();
     }
+    if (gesture_ == Gesture::Custom)
+        endCustomDrag();
     gesture_ = Gesture::Scroll;
     lastScrollX_ = x;
 }
@@ -229,6 +242,8 @@ void CurveCanvas::scrollTo(qreal x)
 
 void CurveCanvas::endGesture()
 {
+    if (gesture_ == Gesture::Custom)
+        endCustomDrag();
     gesture_ = Gesture::None;
     strokeTimer_.invalidate();
 }

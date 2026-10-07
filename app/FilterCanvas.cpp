@@ -265,11 +265,10 @@ QSGNode* FilterCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         sg::buildRibbons(child(ResponseNode)->geometry(), {response}, halfWidth * 0.5f, responseColor_, 0.55f);
 
         // Resonance marker, if it's on the display.
+        std::vector<QPointF> marker;
         if (const auto rx = hw::curveToDisplay(settings_.resonanceX, settings_))
-            sg::buildDot(child(MarkerNode)->geometry(), QPointF(xAt(*rx), valueToY(float(settings_.resonanceDb), area)),
-                         kMarkerRadius, responseColor_);
-        else
-            child(MarkerNode)->geometry()->allocate(0, 0);
+            marker.emplace_back(xAt(*rx), valueToY(float(settings_.resonanceDb), area));
+        sg::buildDots(child(MarkerNode)->geometry(), marker, kMarkerRadius, responseColor_);
 
         for (int n = FillNode; n <= MarkerNode; ++n)
             child(n)->markDirty(QSGNode::DirtyGeometry);

@@ -23,19 +23,24 @@ ApplicationWindow {
     }
 
     // ---- Hardware controls (keyboard-simulated for now, GPIO later) ----
-    // Encoders go to the current page's control map. Switches 1 (Hold) and
-    // 3 (next page) are the same everywhere; others go to the page.
+    // Encoders go to the current page's control map. Switches are the same
+    // everywhere except 2, which the page decides:
+    //   1 = Play (held = note on)   3 = next page   4 = Hold (latch)
     ControlSurface {
         id: controls
         onEncoderTurned: (encoder, steps) => window.currentPage().encoderTurned(encoder, steps)
         onEncoderPressed: (encoder) => window.currentPage().encoderPressed(encoder)
         onSwitchPressed: (sw) => {
+            switch (sw) {
+            case 1: synth.playing = true; break
+            case 3: pages.currentIndex = (pages.currentIndex + 1) % pages.count; break
+            case 4: synth.holding = !synth.holding; break
+            default: window.currentPage().switchPressed(sw)
+            }
+        }
+        onSwitchReleased: (sw) => {
             if (sw === 1)
-                synth.holding = !synth.holding
-            else if (sw === 3)
-                pages.currentIndex = (pages.currentIndex + 1) % pages.count
-            else
-                window.currentPage().switchPressed(sw)
+                synth.playing = false
         }
     }
 
@@ -46,18 +51,30 @@ ApplicationWindow {
 
         OscillatorPage { synth: synth }
         FilterPage { synth: synth }
+        EnvelopePage { synth: synth; envelope: synth.ampEnvelope; title: "AMP ENV" }
+        EnvelopePage { synth: synth; envelope: synth.filterEnvelope; title: "FILTER ENV" }
     }
 
-    // Page indicator: one small dot per page, top-right corner.
+    // Page indicator: a small title and one dot per page, top-right corner.
     Row {
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.margins: 20
+        anchors.topMargin: 16
+        anchors.rightMargin: 20
         spacing: 6
+
+        Text {
+            text: pages.children[pages.currentIndex].title
+            color: Theme.dimText
+            font.pixelSize: Theme.smallFontSize
+            anchors.verticalCenter: parent.verticalCenter
+            rightPadding: 4
+        }
         Repeater {
             model: pages.count
             Rectangle {
                 required property int index
+                anchors.verticalCenter: parent.verticalCenter
                 width: 6
                 height: 6
                 radius: 3

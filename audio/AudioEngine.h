@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrawnFilter.h"
+#include "Envelope.h"
 #include "ParamSmoother.h"
 #include "SpscQueue.h"
 #include "Wavetable.h"
@@ -17,7 +18,9 @@ struct ma_device;
 namespace hw {
 
 // Owns the audio output device and the synth voice:
-//   oscillator -> drawn filter -> volume -> soft clip -> output
+//   oscillator -> drawn filter -> amp envelope -> volume -> soft clip -> output
+// with the filter envelope (times its amount) added to the filter cutoff.
+// A note sounds while the gate is on (setGate).
 //
 // Threading model:
 //   - The "control" thread (the UI thread) calls start/stop and the setters.
@@ -59,6 +62,24 @@ public:
         resonanceDb_.store(levelDb, std::memory_order_relaxed);
     }
 
+    // Envelopes: kAmpEnvelope shapes loudness, kFilterEnvelope moves the cutoff.
+    static constexpr int kAmpEnvelope = 0;
+    static constexpr int kFilterEnvelope = 1;
+    void setEnvelopeMode(int envelope, EnvelopeMode mode);
+    void setAdsr(int envelope, const AdsrParams& params);
+    void setDrawnTiming(int envelope, const DrawnTiming& timing);
+    void setEnvelopeCurve(int envelope, std::unique_ptr<EnvelopeCurve> curve);
+    // How far (octaves) the filter envelope moves the cutoff at full level.
+    void setFilterEnvAmount(float octaves) { filterEnvAmount_.store(octaves, std::memory_order_relaxed); }
+
+    // Where an envelope is right now, for on-screen playheads.
+    struct EnvelopeStatus {
+        EnvelopeStage stage = EnvelopeStage::Idle;
+        double stageSeconds = 0.0;
+        float level = 0.0f;
+    };
+    EnvelopeStatus envelopeStatus(int envelope) const;
+
     // Free tables and curves the audio thread has finished with. Call regularly.
     void collectGarbage();
 
@@ -74,6 +95,21 @@ private:
     void exchangeTables();
     void exchangeFilterCurve();
     void renderBlock(float* output, int frames, unsigned channels);
+    void updateEnvelopes();
+
+    // One envelope plus the settings the UI sends it.
+    struct EnvelopeSlot {
+        Envelope envelope;
+        std::atomic<int> mode{0};
+        std::atomic<float> attack{0.005f}, decay{0.3f}, sustain{0.8f}, release{0.3f};
+        std::atomic<float> split1{1.0f / 3.0f}, split2{2.0f / 3.0f}, timespan{1.0f}, drawnSustain{0.6f};
+        std::atomic<EnvelopeCurve*> pendingCurve{nullptr};
+        const EnvelopeCurve* curve = nullptr; // audio thread's current drawing
+        EnvelopeCurve* heldCurve = nullptr;   // taken from the mailbox, waiting to swap in
+        // Published by the audio thread for the UI.
+        std::atomic<int> statusStage{0};
+        std::atomic<float> statusSeconds{0.0f}, statusLevel{0.0f};
+    };
 
     std::unique_ptr<ma_context> context_;
     std::unique_ptr<ma_device> device_;
@@ -94,11 +130,14 @@ private:
     ParamSmoother filterMixSmoother_; // 0 = bypassed, 1 = filtered; per sample
     std::array<float, kBlock> dry_{};
     std::array<float, kBlock> wet_{};
+    std::array<EnvelopeSlot, 2> envelopes_;
+    bool lastGate_ = false;
 
     std::atomic<Wavetable*> pending_{nullptr};
     SpscQueue<const Wavetable*, 64> retired_;
     std::atomic<FilterCurve*> pendingCurve_{nullptr};
     SpscQueue<const FilterCurve*, 64> retiredCurves_;
+    SpscQueue<const EnvelopeCurve*, 64> retiredEnvelopeCurves_;
 
     std::atomic<float> targetFrequency_{110.0f};
     std::atomic<float> volume_{0.5f};
@@ -108,6 +147,7 @@ private:
     std::atomic<bool> filterLoop_{false};
     std::atomic<float> resonanceX_{0.5f};
     std::atomic<float> resonanceDb_{0.0f};
+    std::atomic<float> filterEnvAmount_{0.0f};
 };
 
 } // namespace hw

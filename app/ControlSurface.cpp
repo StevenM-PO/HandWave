@@ -64,6 +64,12 @@ void ControlSurface::pressSwitch(int sw)
     emit switchPressed(sw);
 }
 
+void ControlSurface::releaseSwitch(int sw)
+{
+    qCDebug(lcInput) << "switch" << sw << "released";
+    emit switchReleased(sw);
+}
+
 // ---- Keyboard source --------------------------------------------------------
 
 int ControlSurface::activeEncoder() const
@@ -136,9 +142,13 @@ bool ControlSurface::handleKey(const QKeyEvent* event, bool pressed)
         if (pressed && !repeat)
             pressEncoder(activeEncoder());
         return true;
-    case Qt::Key_Space:
-        if (pressed && !repeat)
-            pressSwitch(1);
+    case Qt::Key_Space: // momentary: held = note on
+        if (!repeat) {
+            if (pressed)
+                pressSwitch(1);
+            else
+                releaseSwitch(1);
+        }
         return true;
     case Qt::Key_J:
         if (pressed && !repeat)
@@ -147,6 +157,10 @@ bool ControlSurface::handleKey(const QKeyEvent* event, bool pressed)
     case Qt::Key_Tab:
         if (pressed && !repeat)
             pressSwitch(3);
+        return true;
+    case Qt::Key_H:
+        if (pressed && !repeat)
+            pressSwitch(4);
         return true;
     default:
         return false;

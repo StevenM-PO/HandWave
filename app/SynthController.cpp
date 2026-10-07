@@ -13,6 +13,17 @@ SynthController::SynthController(QObject* parent)
     if (!engine_.start())
         statusText_ = QString::fromStdString(engine_.lastError());
 
+    ampEnvelope_ = new EnvelopeController(engine_, hw::AudioEngine::kAmpEnvelope, {0.005, 0.3, 0.8, 0.3}, this);
+    filterEnvelope_ = new EnvelopeController(engine_, hw::AudioEngine::kFilterEnvelope, {0.005, 0.4, 0.3, 0.4}, this);
+
+    // Envelope playheads, about 30 times a second.
+    statusTimer_.setInterval(33);
+    connect(&statusTimer_, &QTimer::timeout, this, [this] {
+        ampEnvelope_->pollStatus();
+        filterEnvelope_->pollStatus();
+    });
+    statusTimer_.start();
+
     // Merge rapid drawing updates. Building a table takes about a millisecond,
     // so doing it once per ~16 ms frame is plenty and keeps the UI smooth.
     rebuildTimer_.setSingleShot(true);
@@ -49,13 +60,37 @@ void SynthController::setVolume(qreal volume)
     emit volumeChanged();
 }
 
+void SynthController::setPlaying(bool on)
+{
+    if (on == playing_)
+        return;
+    playing_ = on;
+    updateGate();
+    emit playingChanged();
+}
+
 void SynthController::setHolding(bool on)
 {
     if (on == holding_)
         return;
     holding_ = on;
-    engine_.setGate(on);
+    updateGate();
     emit holdingChanged();
+}
+
+void SynthController::updateGate()
+{
+    engine_.setGate(playing_ || holding_);
+}
+
+void SynthController::setFilterEnvAmount(qreal octaves)
+{
+    octaves = qBound<qreal>(-6.0, octaves, 6.0);
+    if (octaves == filterEnvAmount_)
+        return;
+    filterEnvAmount_ = octaves;
+    engine_.setFilterEnvAmount(static_cast<float>(octaves));
+    emit filterChanged();
 }
 
 void SynthController::setShape(const QList<qreal>& points)

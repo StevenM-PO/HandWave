@@ -7,6 +7,7 @@ import HandWave
 Item {
     id: page
     required property SynthController synth
+    property string title: "FILTER"
     // For tools and tests (main.cpp --eval) to reach the drawing surface.
     property alias canvas: canvas
 
@@ -16,6 +17,7 @@ Item {
         case 1: canvas.shiftOctaves += steps / 12; break    // cutoff, semitones
         case 2: canvas.resonanceDb += steps; break          // resonance level, dB
         case 3: canvas.moveResonance(steps); break          // resonance position, semitones
+        case 4: synth.filterEnvAmount += steps * 0.25; break // filter envelope amount, octaves
         }
     }
 
@@ -24,6 +26,7 @@ Item {
         case 1: canvas.loop = !canvas.loop; break
         case 2: canvas.resetResonance(); break
         case 3: synth.filterEnabled = !synth.filterEnabled; break
+        case 4: synth.filterEnvAmount = 0; break
         }
     }
 
@@ -134,7 +137,8 @@ Item {
                 elide: Text.ElideLeft
                 color: Theme.text
                 font.pixelSize: 13
-                text: "Cutoff " + page.signed(canvas.shiftOctaves, 1) + " oct  ·  Res "
+                text: "Cutoff " + page.signed(canvas.shiftOctaves, 1) + " oct  ·  Env "
+                      + page.signed(page.synth.filterEnvAmount, 2) + " oct\nRes "
                       + (canvas.resonanceHz > 0
                          ? page.hzText(canvas.resonanceHz) + " " + page.signed(canvas.resonanceDb, 1) + " dB"
                          : "off-screen")

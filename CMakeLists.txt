@@ -16,6 +16,8 @@ add_library(handwave_core STATIC
     core/Biquad.h
     core/DrawnFilter.cpp
     core/DrawnFilter.h
+    core/Envelope.cpp
+    core/Envelope.h
     core/Fft.cpp
     core/Fft.h
     core/ParamSmoother.h
@@ -58,7 +60,7 @@ if(HANDWAVE_BUILD_APP)
     qt_add_executable(handwave app/main.cpp)
 
     # QML files sit at the module root (qrc:/HandWave/<name>.qml).
-    set(HANDWAVE_QML Main.qml Theme.qml PadButton.qml OscillatorPage.qml FilterPage.qml)
+    set(HANDWAVE_QML Main.qml Theme.qml PadButton.qml OscillatorPage.qml FilterPage.qml EnvelopePage.qml)
     list(TRANSFORM HANDWAVE_QML PREPEND app/qml/ OUTPUT_VARIABLE HANDWAVE_QML_PATHS)
     foreach(path IN LISTS HANDWAVE_QML_PATHS)
         get_filename_component(name ${path} NAME)
@@ -77,6 +79,10 @@ if(HANDWAVE_BUILD_APP)
             app/ControlSurface.h
             app/CurveCanvas.cpp
             app/CurveCanvas.h
+            app/EnvelopeCanvas.cpp
+            app/EnvelopeCanvas.h
+            app/EnvelopeController.cpp
+            app/EnvelopeController.h
             app/FilterCanvas.cpp
             app/FilterCanvas.h
             app/SceneGraphHelpers.cpp
@@ -111,6 +117,7 @@ if(HANDWAVE_BUILD_TESTS)
     add_executable(handwave_tests
         tests/test_builder.cpp
         tests/test_drawn_filter.cpp
+        tests/test_envelope.cpp
         tests/test_oscillator.cpp
         tests/test_shape_edits.cpp
     )

@@ -133,29 +133,35 @@ void buildFill(QSGGeometry* g, const Polyline& line, float baselineY, const QCol
     }
 }
 
-void buildDot(QSGGeometry* g, QPointF centre, float radius, const QColor& color)
+void buildDots(QSGGeometry* g, const std::vector<QPointF>& centres, float radius, const QColor& color)
 {
-    // Centre, then an inner (solid) and outer (transparent) ring.
+    // Per dot: centre, then an inner (solid) and outer (transparent) ring.
     constexpr int kSegments = 20;
+    constexpr int kVertices = 1 + 2 * kSegments;
     constexpr double kPi = 3.14159265358979323846;
-    ensureSize(g, 1 + 2 * kSegments, 9 * kSegments);
+    const int dots = int(centres.size());
+    ensureSize(g, dots * kVertices, dots * 9 * kSegments);
     auto* v = g->vertexDataAsColoredPoint2D();
-    const float cx = float(centre.x()), cy = float(centre.y());
-    setVertex(v[0], cx, cy, color, 1.0f);
-    for (int s = 0; s < kSegments; ++s) {
-        const double a = 2.0 * kPi * s / kSegments;
-        const float dx = float(std::cos(a)), dy = float(std::sin(a));
-        setVertex(v[1 + s], cx + dx * radius, cy + dy * radius, color, 1.0f);
-        setVertex(v[1 + kSegments + s], cx + dx * (radius + kFeather), cy + dy * (radius + kFeather), color, 0.0f);
-    }
     auto* idx = g->indexDataAsUShort();
     int k = 0;
-    for (int s = 0; s < kSegments; ++s) {
-        const quint16 i0 = quint16(1 + s), i1 = quint16(1 + (s + 1) % kSegments);
-        const quint16 o0 = i0 + kSegments, o1 = i1 + kSegments;
-        idx[k++] = 0; idx[k++] = i0; idx[k++] = i1;
-        idx[k++] = i0; idx[k++] = o0; idx[k++] = i1;
-        idx[k++] = i1; idx[k++] = o0; idx[k++] = o1;
+    for (int d = 0; d < dots; ++d) {
+        const int base = d * kVertices;
+        const float cx = float(centres[d].x()), cy = float(centres[d].y());
+        setVertex(v[base], cx, cy, color, 1.0f);
+        for (int s = 0; s < kSegments; ++s) {
+            const double a = 2.0 * kPi * s / kSegments;
+            const float dx = float(std::cos(a)), dy = float(std::sin(a));
+            setVertex(v[base + 1 + s], cx + dx * radius, cy + dy * radius, color, 1.0f);
+            setVertex(v[base + 1 + kSegments + s], cx + dx * (radius + kFeather), cy + dy * (radius + kFeather),
+                      color, 0.0f);
+        }
+        for (int s = 0; s < kSegments; ++s) {
+            const quint16 i0 = quint16(base + 1 + s), i1 = quint16(base + 1 + (s + 1) % kSegments);
+            const quint16 o0 = quint16(i0 + kSegments), o1 = quint16(i1 + kSegments);
+            idx[k++] = quint16(base); idx[k++] = i0; idx[k++] = i1;
+            idx[k++] = i0; idx[k++] = o0; idx[k++] = i1;
+            idx[k++] = i1; idx[k++] = o0; idx[k++] = o1;
+        }
     }
 }
 

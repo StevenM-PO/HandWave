@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AudioEngine.h"
+#include "EnvelopeController.h"
 
 #include <QList>
 #include <QObject>
@@ -18,7 +19,13 @@ class SynthController : public QObject {
     QML_ELEMENT
     Q_PROPERTY(qreal frequency READ frequency WRITE setFrequency NOTIFY frequencyChanged)
     Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
+    // A note sounds while `playing` (Play pad / Space held) or `holding` (latched).
+    Q_PROPERTY(bool playing READ playing WRITE setPlaying NOTIFY playingChanged)
     Q_PROPERTY(bool holding READ holding WRITE setHolding NOTIFY holdingChanged)
+    Q_PROPERTY(EnvelopeController* ampEnvelope READ ampEnvelope CONSTANT)
+    Q_PROPERTY(EnvelopeController* filterEnvelope READ filterEnvelope CONSTANT)
+    // How far (octaves, +-) the filter envelope moves the cutoff.
+    Q_PROPERTY(qreal filterEnvAmount READ filterEnvAmount WRITE setFilterEnvAmount NOTIFY filterChanged)
     Q_PROPERTY(bool filterEnabled READ filterEnabled WRITE setFilterEnabled NOTIFY filterChanged)
     Q_PROPERTY(qreal filterShift READ filterShift WRITE setFilterShift NOTIFY filterChanged)
     Q_PROPERTY(bool filterLoop READ filterLoop WRITE setFilterLoop NOTIFY filterChanged)
@@ -35,8 +42,14 @@ public:
     void setFrequency(qreal hz);
     qreal volume() const { return volume_; }
     void setVolume(qreal volume);
+    bool playing() const { return playing_; }
+    void setPlaying(bool on);
     bool holding() const { return holding_; }
     void setHolding(bool on);
+    EnvelopeController* ampEnvelope() const { return ampEnvelope_; }
+    EnvelopeController* filterEnvelope() const { return filterEnvelope_; }
+    qreal filterEnvAmount() const { return filterEnvAmount_; }
+    void setFilterEnvAmount(qreal octaves);
 
     bool filterEnabled() const { return filterEnabled_; }
     void setFilterEnabled(bool on);
@@ -63,24 +76,31 @@ public:
 signals:
     void frequencyChanged();
     void volumeChanged();
+    void playingChanged();
     void holdingChanged();
     void filterChanged();
 
 private:
     void rebuildWavetable();
+    void updateGate();
     void sendFilterCurve();
     void sendResonance();
 
     hw::AudioEngine engine_;
     QTimer rebuildTimer_;
     QTimer garbageTimer_;
+    QTimer statusTimer_;
+    EnvelopeController* ampEnvelope_ = nullptr;
+    EnvelopeController* filterEnvelope_ = nullptr;
     std::vector<float> pendingShape_;
     QTimer filterCurveTimer_;
     std::vector<float> pendingFilterCurve_;
 
     qreal frequency_ = 110.0;
     qreal volume_ = 0.5;
+    bool playing_ = false;
     bool holding_ = false;
+    qreal filterEnvAmount_ = 0.0;
     bool filterEnabled_ = true;
     qreal filterShift_ = 0.0;
     bool filterLoop_ = false;
