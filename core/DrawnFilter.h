@@ -91,6 +91,9 @@ public:
 
     // Total response of a designed filter at `frequencyHz`, in dB.
     double responseDb(const Sections& sections, double frequencyHz) const;
+    // Highest gain (dB) of a designed filter across the display, including
+    // the top of its resonance peak.
+    double peakDb(const Sections& sections, const FilterSettings& settings) const;
 
     static double bandCentreHz(int band);
 
@@ -107,6 +110,10 @@ private:
 // Runs a designed filter over audio. Call update() once per block with the
 // latest curve and settings; the new coefficients are blended in across the
 // following block so moving the cutoff doesn't crackle.
+//
+// Auto-level: when the filter boosts anywhere (curve above 0 dB, resonance),
+// its output is turned down by its peak gain, so boosts reshape the tone
+// without overloading. The level change blends in with the coefficients.
 class DrawnFilter {
 public:
     explicit DrawnFilter(double sampleRate);
@@ -120,12 +127,15 @@ public:
     void reset();
 
     const FilterDesigner& designer() const { return designer_; }
+    // Current auto-level gain, in dB (0 or negative).
+    double levelDb() const { return 20.0 * std::log10(gainTo_); }
 
 private:
     FilterDesigner designer_;
     FilterDesigner::Sections current_{}, from_{}, to_{};
     std::array<Biquad, FilterDesigner::kSections> state_{};
     bool blending_ = false;
+    double gain_ = 1.0, gainFrom_ = 1.0, gainTo_ = 1.0; // auto-level, linear
 
     // What the last design was made from, to skip redundant work.
     FilterSettings lastSettings_{};

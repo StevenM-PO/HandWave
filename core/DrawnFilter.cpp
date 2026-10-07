@@ -236,6 +236,20 @@ double FilterDesigner::responseDb(const Sections& sections, double frequencyHz) 
     return db;
 }
 
+double FilterDesigner::peakDb(const Sections& sections, const FilterSettings& settings) const
+{
+    // Only where it's audible: the response's top and bottom edges carry the
+    // design's small overshoots, which shouldn't turn everything down.
+    constexpr double kLowestHz = 25.0, kHighestHz = 16000.0;
+    double peak = 0.0;
+    for (double hz : matchHz_)
+        if (hz >= kLowestHz && hz <= kHighestHz)
+            peak = std::max(peak, responseDb(sections, hz));
+    if (const auto x = curveToDisplay(settings.resonanceX, settings))
+        peak = std::max(peak, responseDb(sections, filterXToHz(*x)));
+    return peak;
+}
+
 // ---- Real-time filter ---------------------------------------------------------
 
 DrawnFilter::DrawnFilter(double sampleRate)
@@ -249,11 +263,14 @@ void DrawnFilter::update(const FilterCurve& curve, const FilterSettings& setting
         return;
 
     designer_.design(curve, settings, to_);
+    gainTo_ = std::pow(10.0, std::min(0.0, -designer_.peakDb(to_, settings)) / 20.0);
     if (designed_) {
         from_ = current_;
+        gainFrom_ = gain_;
         blending_ = true;
     } else {
         current_ = to_;
+        gain_ = gainTo_;
         designed_ = true;
     }
     lastSettings_ = settings;
@@ -268,6 +285,7 @@ void DrawnFilter::process(float* samples, int count)
             const double t = static_cast<double>(step + 1) / steps;
             for (int s = 0; s < FilterDesigner::kSections; ++s)
                 current_[s] = BiquadCoeffs::lerp(from_[s], to_[s], t);
+            gain_ = gainFrom_ + (gainTo_ - gainFrom_) * t;
         }
         const int begin = step * kBlendStep;
         const int end = std::min(count, begin + kBlendStep);
@@ -275,11 +293,12 @@ void DrawnFilter::process(float* samples, int count)
             double x = samples[i];
             for (int s = 0; s < FilterDesigner::kSections; ++s)
                 x = state_[s].process(current_[s], x);
-            samples[i] = static_cast<float>(x);
+            samples[i] = static_cast<float>(x * gain_);
         }
     }
     if (blending_) {
         current_ = to_;
+        gain_ = gainTo_;
         blending_ = false;
     }
 }

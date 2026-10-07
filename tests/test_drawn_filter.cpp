@@ -141,8 +141,43 @@ TEST_CASE("The running filter matches its design")
     filter.designer().design(curve, s, sections);
     for (double hz : {100.0, 700.0, 1500.0, 3000.0}) {
         INFO(hz << " Hz");
-        REQUIRE(measuredGainDb(filter, hz) == Catch::Approx(filter.designer().responseDb(sections, hz)).margin(0.5));
+        const double expected = filter.designer().responseDb(sections, hz) + filter.levelDb();
+        REQUIRE(measuredGainDb(filter, hz) == Catch::Approx(expected).margin(0.5));
     }
+}
+
+TEST_CASE("Auto-level keeps boosts from overloading")
+{
+    DrawnFilter filter(kRate);
+    FilterSettings s;
+    FilterCurve curve = FilterCurve::preset(FilterPreset::LowPass, &s.resonanceX);
+
+    // No boost anywhere: the level is left alone.
+    s.resonanceDb = curve.sample(s.resonanceX);
+    filter.update(curve, s);
+    REQUIRE(filter.levelDb() > -1.0);
+
+    // Big resonance: the peak comes out at about unity, not +24 dB.
+    s.resonanceDb = 24.0;
+    filter.update(curve, s);
+    filter.process(std::vector<float>(512).data(), 512); // let the level blend in
+    REQUIRE(filter.levelDb() < -20.0);
+    REQUIRE(measuredGainDb(filter, 1000.0) == Catch::Approx(0.0).margin(1.0));
+
+    // A curve drawn +12 dB everywhere is levelled back so its loudest point
+    // is at unity (the rest sits within the design's ripple below it).
+    FilterCurve loud;
+    std::fill(loud.db.begin(), loud.db.end(), 12.0f);
+    FilterSettings flat;
+    flat.resonanceDb = 12.0;
+    filter.update(loud, flat);
+    filter.process(std::vector<float>(512).data(), 512);
+    FilterDesigner::Sections sections;
+    filter.designer().design(loud, flat, sections);
+    REQUIRE(filter.designer().peakDb(sections, flat) + filter.levelDb() == Catch::Approx(0.0).margin(0.01));
+    const double expected = filter.designer().responseDb(sections, 440.0) + filter.levelDb();
+    REQUIRE(expected <= 0.01);
+    REQUIRE(measuredGainDb(filter, 440.0) == Catch::Approx(expected).margin(0.5));
 }
 
 TEST_CASE("Fast cutoff and resonance sweeps stay stable")
