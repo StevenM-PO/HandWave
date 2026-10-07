@@ -34,9 +34,9 @@ case "${1:-}" in
     for opt in quiet loglevel=3 logo.nologo vt.global_cursor_default=0; do
         grep -qw "$opt" "$CMDLINE" || sudo sed -i "1 s/\$/ $opt/" "$CMDLINE"
     done
-    # cloud-init applies Raspberry Pi Imager's settings on first boot only, but
-    # still runs (and blocks boot) every time. Re-enable: delete this file.
-    [ -d /etc/cloud ] && sudo touch /etc/cloud/cloud-init.disabled
+    # Leave cloud-init enabled. On Pi OS trixie it keeps the Imager-provided
+    # Wi-Fi profile (/etc/netplan/90-NM-*.yaml) in sync on every boot;
+    # disabling it emptied those files and the Pi lost Wi-Fi.
     sudo systemctl restart handwave.service
     ;;
 --no-kiosk)
@@ -45,7 +45,6 @@ case "${1:-}" in
     sudo systemctl enable --now getty@tty1.service
     CMDLINE=/boot/firmware/cmdline.txt
     [ -f "$CMDLINE.handwave-backup" ] && sudo cp "$CMDLINE.handwave-backup" "$CMDLINE"
-    sudo rm -f /etc/cloud/cloud-init.disabled
     ;;
 esac
 

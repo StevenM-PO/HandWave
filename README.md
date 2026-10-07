@@ -52,8 +52,8 @@ journalctl -u handwave -f          # app logs
 
 - **Kiosk boot:** [deploy/handwave.service](deploy/handwave.service) runs the app with Qt's `eglfs` backend
   (OpenGL ES straight to the display, no desktop) on tty1, and restarts it if it crashes. The install script
-  also disables the tty1 login, quiets the kernel console, and disables cloud-init (Imager's first-boot tool).
-  The app is on screen about 12 s after the kernel starts.
+  also disables the tty1 login and quiets the kernel console. It deliberately leaves cloud-init enabled: on
+  trixie it maintains the Wi-Fi profile from Imager, and disabling it wiped the Wi-Fi settings.
 - **Display config:** [deploy/kms.json](deploy/kms.json) selects the DSI output and turns HDMI off.
 - **Audio:** the 3.5 mm jack (ALSA card 0) works but is noisy; an I2S DAC HAT (PCM5102A / HiFiBerry DAC+) is
   the planned upgrade.
