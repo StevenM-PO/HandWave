@@ -291,8 +291,9 @@ QSGNode* EnvelopeCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         curveDirty_ = false;
     }
 
-    // Playhead: where a sounding note is on the envelope.
-    std::vector<QPointF> playhead;
+    // Playhead: a vertical line at how far through the envelope a sounding
+    // note is (time only; it waits at the sustain point while held).
+    sg::Polyline playhead;
     if (envelope_ && envelope_->stage() != int(hw::EnvelopeStage::Idle)) {
         const auto stage = hw::EnvelopeStage(envelope_->stage());
         const double t = envelope_->stageSeconds();
@@ -315,14 +316,14 @@ QSGNode* EnvelopeCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             switch (stage) {
             case hw::EnvelopeStage::Attack: x = l.start + progress(p.attack) * (l.attackEnd - l.start); break;
             case hw::EnvelopeStage::Decay: x = l.attackEnd + progress(p.decay) * (l.decayEnd - l.attackEnd); break;
-            case hw::EnvelopeStage::Sustain: x = (l.decayEnd + l.sustainEnd) / 2; break;
+            case hw::EnvelopeStage::Sustain: x = l.decayEnd; break;
             case hw::EnvelopeStage::Release: x = l.sustainEnd + progress(p.release) * (l.releaseEnd - l.sustainEnd); break;
             default: break;
             }
         }
-        playhead.emplace_back(x, valueToY(float(envelope_->level()), area));
+        playhead = {QPointF(x, area.top()), QPointF(x, area.bottom())};
     }
-    sg::buildDots(child(PlayheadNode)->geometry(), playhead, kHandleRadius - 1.0f, Qt::white);
+    sg::buildRibbons(child(PlayheadNode)->geometry(), {playhead}, 1.0f, Qt::white, 0.7f);
     child(PlayheadNode)->markDirty(QSGNode::DirtyGeometry);
 
     return root;

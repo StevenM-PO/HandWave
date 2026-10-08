@@ -137,10 +137,10 @@ qreal EnvelopeController::stepTime(qreal seconds, int steps, qreal minimum, qrea
 void EnvelopeController::pollStatus()
 {
     const auto status = engine_.envelopeStatus(envelope_);
-    if (status.stage == status_.stage && status.stageSeconds == status_.stageSeconds && status.level == status_.level)
+    if (status.stage == status_.stage && status.stageSeconds == status_.stageSeconds)
         return;
     status_ = status;
     qCDebug(lcEnvelope) << "envelope" << envelope_ << "status: stage" << int(status.stage) << "t"
-                        << status.stageSeconds << "level" << status.level;
+                        << status.stageSeconds;
     emit statusChanged();
 }

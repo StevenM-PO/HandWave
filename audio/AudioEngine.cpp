@@ -190,7 +190,7 @@ AudioEngine::EnvelopeStatus AudioEngine::envelopeStatus(int envelope) const
 {
     const EnvelopeSlot& slot = envelopes_[envelope];
     return {static_cast<EnvelopeStage>(slot.statusStage.load(std::memory_order_relaxed)),
-            slot.statusSeconds.load(std::memory_order_relaxed), slot.statusLevel.load(std::memory_order_relaxed)};
+            slot.statusSeconds.load(std::memory_order_relaxed)};
 }
 
 void AudioEngine::collectGarbage()
@@ -291,7 +291,6 @@ void AudioEngine::render(float* output, unsigned frames, unsigned channels)
     for (EnvelopeSlot& slot : envelopes_) {
         slot.statusStage.store(static_cast<int>(slot.envelope.stage()), std::memory_order_relaxed);
         slot.statusSeconds.store(float(slot.envelope.stageSeconds()), std::memory_order_relaxed);
-        slot.statusLevel.store(slot.envelope.level(), std::memory_order_relaxed);
     }
 }
 

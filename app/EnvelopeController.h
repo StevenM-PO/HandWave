@@ -31,10 +31,9 @@ class EnvelopeController : public QObject {
     Q_PROPERTY(qreal split1 READ split1 WRITE setSplit1 NOTIFY settingsChanged)
     Q_PROPERTY(qreal split2 READ split2 WRITE setSplit2 NOTIFY settingsChanged)
     Q_PROPERTY(qreal timespan READ timespan WRITE setTimespan NOTIFY settingsChanged)
-    // Playhead (EnvelopeStage as int, seconds into it, level).
+    // Playhead (EnvelopeStage as int, seconds into it).
     Q_PROPERTY(int stage READ stage NOTIFY statusChanged)
     Q_PROPERTY(qreal stageSeconds READ stageSeconds NOTIFY statusChanged)
-    Q_PROPERTY(qreal level READ level NOTIFY statusChanged)
 
 public:
     // Knob ranges.
@@ -67,7 +66,6 @@ public:
 
     int stage() const { return int(status_.stage); }
     qreal stageSeconds() const { return status_.stageSeconds; }
-    qreal level() const { return status_.level; }
 
     const hw::AdsrParams& adsr() const { return adsr_; }
     const hw::DrawnTiming& timing() const { return timing_; }

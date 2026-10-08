@@ -76,7 +76,6 @@ public:
     struct EnvelopeStatus {
         EnvelopeStage stage = EnvelopeStage::Idle;
         double stageSeconds = 0.0;
-        float level = 0.0f;
     };
     EnvelopeStatus envelopeStatus(int envelope) const;
 
@@ -108,7 +107,7 @@ private:
         EnvelopeCurve* heldCurve = nullptr;   // taken from the mailbox, waiting to swap in
         // Published by the audio thread for the UI.
         std::atomic<int> statusStage{0};
-        std::atomic<float> statusSeconds{0.0f}, statusLevel{0.0f};
+        std::atomic<float> statusSeconds{0.0f};
     };
 
     std::unique_ptr<ma_context> context_;

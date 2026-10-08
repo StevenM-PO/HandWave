@@ -18,7 +18,8 @@
 //           edge to move them. The note sustains at the drawing's level at
 //           the decay/release divider.
 //
-// A dot shows where a playing note is on the envelope. The first switch to
+// A vertical line sweeps across as a note plays, showing how far through
+// the envelope it is. The first switch to
 // Drawn copies the current ADSR into the drawing.
 class EnvelopeCanvas : public CurveCanvas {
     Q_OBJECT
