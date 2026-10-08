@@ -25,6 +25,23 @@ void ensureSize(QSGGeometry* g, int vertices, int indices)
         g->allocate(vertices, indices);
 }
 
+// "Nothing to draw", without ever leaving a geometry empty.
+//
+// Qt's batch renderer leaves nodes with zero vertices out of its draw
+// batches, and doesn't put them back when they later gain vertices unless
+// something else triggers a batch rebuild: e.g. the envelope playhead stayed
+// invisible while a note played. So empty content is a single invisible,
+// zero-size triangle instead, which keeps every node in its batch.
+void setEmptyTriangles(QSGGeometry* g)
+{
+    ensureSize(g, 3, 3);
+    auto* v = g->vertexDataAsColoredPoint2D();
+    for (int i = 0; i < 3; ++i)
+        v[i].set(0, 0, 0, 0, 0, 0);
+    auto* idx = g->indexDataAsUShort();
+    idx[0] = 0; idx[1] = 1; idx[2] = 2;
+}
+
 } // namespace
 
 QSGGeometryNode* makeNode(QSGGeometry* geometry, QSGMaterial* material)
@@ -64,6 +81,10 @@ void buildRibbons(QSGGeometry* g, const std::vector<Polyline>& lines, float half
             continue;
         vertexCount += 4 * int(p.size());
         indexCount += 18 * (int(p.size()) - 1);
+    }
+    if (vertexCount == 0) {
+        setEmptyTriangles(g);
+        return;
     }
     ensureSize(g, vertexCount, indexCount);
     auto* v = g->vertexDataAsColoredPoint2D();
@@ -115,7 +136,7 @@ void buildFill(QSGGeometry* g, const Polyline& line, float baselineY, const QCol
 {
     const int count = int(line.size());
     if (count < 2) {
-        ensureSize(g, 0, 0);
+        setEmptyTriangles(g);
         return;
     }
     ensureSize(g, 2 * count, 6 * (count - 1));
@@ -140,6 +161,10 @@ void buildDots(QSGGeometry* g, const std::vector<QPointF>& centres, float radius
     constexpr int kVertices = 1 + 2 * kSegments;
     constexpr double kPi = 3.14159265358979323846;
     const int dots = int(centres.size());
+    if (dots == 0) {
+        setEmptyTriangles(g);
+        return;
+    }
     ensureSize(g, dots * kVertices, dots * 9 * kSegments);
     auto* v = g->vertexDataAsColoredPoint2D();
     auto* idx = g->indexDataAsUShort();
@@ -167,6 +192,13 @@ void buildDots(QSGGeometry* g, const std::vector<QPointF>& centres, float radius
 
 void buildLines(QSGGeometry* g, const std::vector<QPointF>& endpoints)
 {
+    if (endpoints.empty()) { // see setEmptyTriangles(): never leave it empty
+        if (g->vertexCount() != 2)
+            g->allocate(2);
+        g->vertexDataAsPoint2D()[0].set(0, 0);
+        g->vertexDataAsPoint2D()[1].set(0, 0);
+        return;
+    }
     if (g->vertexCount() != int(endpoints.size()))
         g->allocate(int(endpoints.size()));
     auto* v = g->vertexDataAsPoint2D();
