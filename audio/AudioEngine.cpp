@@ -178,7 +178,6 @@ void AudioEngine::setDrawnTiming(int envelope, const DrawnTiming& timing)
     slot.split1.store(float(timing.split1), std::memory_order_relaxed);
     slot.split2.store(float(timing.split2), std::memory_order_relaxed);
     slot.timespan.store(float(timing.timespan), std::memory_order_relaxed);
-    slot.drawnSustain.store(float(timing.sustain), std::memory_order_relaxed);
 }
 
 void AudioEngine::setEnvelopeCurve(int envelope, std::unique_ptr<EnvelopeCurve> curve)
@@ -255,8 +254,7 @@ void AudioEngine::updateEnvelopes()
         env.setAdsr({slot.attack.load(std::memory_order_relaxed), slot.decay.load(std::memory_order_relaxed),
                      slot.sustain.load(std::memory_order_relaxed), slot.release.load(std::memory_order_relaxed)});
         env.setDrawn(slot.curve, {slot.split1.load(std::memory_order_relaxed), slot.split2.load(std::memory_order_relaxed),
-                                  slot.timespan.load(std::memory_order_relaxed),
-                                  slot.drawnSustain.load(std::memory_order_relaxed)});
+                                  slot.timespan.load(std::memory_order_relaxed)});
     }
 
     // Note on / note off.

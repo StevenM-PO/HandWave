@@ -102,7 +102,7 @@ private:
         Envelope envelope;
         std::atomic<int> mode{0};
         std::atomic<float> attack{0.005f}, decay{0.3f}, sustain{0.8f}, release{0.3f};
-        std::atomic<float> split1{1.0f / 3.0f}, split2{2.0f / 3.0f}, timespan{1.0f}, drawnSustain{0.6f};
+        std::atomic<float> split1{1.0f / 3.0f}, split2{2.0f / 3.0f}, timespan{1.0f};
         std::atomic<EnvelopeCurve*> pendingCurve{nullptr};
         const EnvelopeCurve* curve = nullptr; // audio thread's current drawing
         EnvelopeCurve* heldCurve = nullptr;   // taken from the mailbox, waiting to swap in

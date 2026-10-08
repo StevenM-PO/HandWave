@@ -15,7 +15,8 @@
 //           handle is dragged so it doesn't move under the finger.
 //   Drawn - you draw the curve. Dotted dividers split it into attack, decay
 //           and release (each its own colour); drag their tabs along the top
-//           edge to move them. The sustain level is a bar on the right edge.
+//           edge to move them. The note sustains at the drawing's level at
+//           the decay/release divider.
 //
 // A dot shows where a playing note is on the envelope. The first switch to
 // Drawn copies the current ADSR into the drawing.
@@ -27,15 +28,19 @@ class EnvelopeCanvas : public CurveCanvas {
     Q_PROPERTY(QColor decayColor MEMBER decayColor_ NOTIFY appearanceChanged)
     Q_PROPERTY(QColor releaseColor MEMBER releaseColor_ NOTIFY appearanceChanged)
     Q_PROPERTY(QColor handleColor MEMBER handleColor_ NOTIFY appearanceChanged)
+    // Drawn mode's sustain level: the drawing at the decay/release divider.
+    Q_PROPERTY(qreal sustainLevel READ sustainLevel NOTIFY sustainLevelChanged)
 
 public:
     explicit EnvelopeCanvas(QQuickItem* parent = nullptr);
 
     EnvelopeController* envelope() const { return envelope_; }
     void setEnvelope(EnvelopeController* envelope);
+    qreal sustainLevel() const;
 
 signals:
     void envelopeChanged();
+    void sustainLevelChanged();
 
 protected:
     QRectF plotArea() const override;

@@ -27,7 +27,6 @@ Item {
             switch (encoder) {
             case 1: e.split1 += steps * 0.01; break
             case 2: e.split2 += steps * 0.01; break
-            case 3: e.drawnSustain += steps * 0.02; break
             case 4: e.timespan = e.stepTime(e.timespan, steps, 0.01, 30); break
             }
         }
@@ -117,7 +116,7 @@ Item {
                                + "  ·  S " + page.percent(e.sustain) + "  ·  R " + page.timeText(e.release)
                     const t = e.timespan
                     return "A " + page.timeText(e.split1 * t) + " · D " + page.timeText((e.split2 - e.split1) * t)
-                           + " · R " + page.timeText((1 - e.split2) * t) + " · S " + page.percent(e.drawnSustain)
+                           + " · R " + page.timeText((1 - e.split2) * t) + " · S " + page.percent(canvas.sustainLevel)
                            + "\nTotal " + page.timeText(t)
                 }
             }

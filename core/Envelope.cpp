@@ -72,7 +72,6 @@ void renderAdsrToDrawing(const AdsrParams& adsr, EnvelopeCurve& curve, DrawnTimi
     timing.split1 = a / total;
     timing.split2 = (a + d) / total;
     timing.timespan = total;
-    timing.sustain = adsr.sustain;
 }
 
 // ---- Generator ---------------------------------------------------------------
@@ -130,10 +129,18 @@ double Envelope::drawnLevel(double u) const
     switch (stage_) {
     case EnvelopeStage::Attack: // ramp from where we are onto the drawing
         return c.sample(u * s1) + (startLevel_ - c.sample(0.0)) * (1.0 - u);
-    case EnvelopeStage::Decay: // bend so the end lands on the sustain level
-        return c.sample(s1 + u * (s2 - s1)) + (timing_.sustain - c.sample(s2)) * u;
-    case EnvelopeStage::Release: // ramp from the note-off level onto the drawing
-        return c.sample(s2 + u * (1.0 - s2)) + (startLevel_ - c.sample(s2)) * (1.0 - u);
+    case EnvelopeStage::Decay:
+        return c.sample(s1 + u * (s2 - s1));
+    case EnvelopeStage::Release: {
+        const double shape = c.sample(s2 + u * (1.0 - s2));
+        const double drawnStart = c.sample(s2); // = sustain
+        // From sustain these match and the drawing is followed exactly.
+        // Otherwise scale the drawn release to start from the current level;
+        // if the drawing starts near 0 there's nothing to scale, so ramp instead.
+        if (drawnStart > 0.02)
+            return shape * (startLevel_ / drawnStart);
+        return shape + (startLevel_ - drawnStart) * (1.0 - u);
+    }
     default:
         return 0.0;
     }
@@ -150,7 +157,8 @@ float Envelope::next()
         }
 
         if (stage_ == EnvelopeStage::Sustain) {
-            const double target = mode_ == EnvelopeMode::Drawn ? timing_.sustain : adsr_.sustain;
+            const double target = mode_ == EnvelopeMode::Adsr ? adsr_.sustain
+                                  : curve_ ? curve_->sample(timing_.split2) : 0.0;
             level_ += static_cast<float>((target - level_) * (1.0 - std::exp(-dt_ / kSustainGlideSeconds)));
             time_ += dt_;
             return level_;

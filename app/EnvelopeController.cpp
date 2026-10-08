@@ -111,15 +111,6 @@ void EnvelopeController::setTimespan(qreal seconds)
     sendTiming();
 }
 
-void EnvelopeController::setDrawnSustain(qreal level)
-{
-    level = std::clamp<qreal>(level, 0.0, 1.0);
-    if (level == timing_.sustain)
-        return;
-    timing_.sustain = level;
-    sendTiming();
-}
-
 void EnvelopeController::setTiming(const hw::DrawnTiming& timing)
 {
     timing_ = timing;

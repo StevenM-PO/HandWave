@@ -16,13 +16,11 @@ enum NodeIndex {
     GridNode, GuideNode,                          // flat-colour lines
     AttackFill, DecayFill, ReleaseFill,           // gradients under the curve
     SustainLine, AttackLine, DecayLine, ReleaseLine,
-    SustainTrack, SustainLevel,                   // Drawn mode's sustain bar
     HandleNode, PlayheadNode,
     NodeCount
 };
 
 constexpr qreal kTabZone = 20.0;      // strip above the plot holding the divider tabs
-constexpr qreal kSustainBar = 22.0;   // strip right of the plot holding the sustain bar
 constexpr qreal kGrabRadius = 32.0;   // how close a press must be to grab a handle
 constexpr float kHandleRadius = 6.0f;
 constexpr qreal kSustainShare = 0.2;  // ADSR: share of the width showing the sustain stretch
@@ -37,6 +35,7 @@ EnvelopeCanvas::EnvelopeCanvas(QQuickItem* parent)
     connect(this, &CurveCanvas::samplesChanged, this, [this] {
         if (envelope_)
             envelope_->setCurve(samples());
+        emit sustainLevelChanged();
     });
 }
 
@@ -54,6 +53,13 @@ void EnvelopeCanvas::setEnvelope(EnvelopeController* envelope)
         settingsChanged();
     }
     emit envelopeChanged();
+}
+
+qreal EnvelopeCanvas::sustainLevel() const
+{
+    hw::EnvelopeCurve curve;
+    curve.points = points_;
+    return envelope_ ? curve.sample(envelope_->split2()) : 0.0;
 }
 
 bool EnvelopeCanvas::drawnMode() const
@@ -75,6 +81,7 @@ void EnvelopeCanvas::settingsChanged()
     }
     curveDirty_ = true;
     update();
+    emit sustainLevelChanged(); // the divider may have moved
 }
 
 // ---- Layout ------------------------------------------------------------------
@@ -82,7 +89,7 @@ void EnvelopeCanvas::settingsChanged()
 QRectF EnvelopeCanvas::plotArea() const
 {
     const qreal inset = lineWidth_ + kHandleRadius;
-    return QRectF(inset, kTabZone, std::max<qreal>(0, width() - kSustainBar - 2 * inset),
+    return QRectF(inset, kTabZone, std::max<qreal>(0, width() - 2 * inset),
                   std::max<qreal>(0, height() - kTabZone - inset));
 }
 
@@ -274,16 +281,6 @@ QSGNode* EnvelopeCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         QSGGeometryNode* guideNode = child(GuideNode);
         static_cast<QSGFlatColorMaterial*>(guideNode->material())->setColor(gridColor_.lighter(180));
         sg::buildLines(guideNode->geometry(), guides);
-
-        // Drawn mode's sustain bar: a track with the level filled up from the bottom.
-        sg::Polyline track, level;
-        if (drawn) {
-            const qreal x = area.right() + kSustainBar / 2 + kHandleRadius;
-            track = {QPointF(x, area.top()), QPointF(x, area.bottom())};
-            level = {QPointF(x, area.bottom()), QPointF(x, valueToY(float(envelope_->drawnSustain()), area))};
-        }
-        sg::buildRibbons(child(SustainTrack)->geometry(), {track}, 3.0f, gridColor_, 1.0f);
-        sg::buildRibbons(child(SustainLevel)->geometry(), {level}, 3.0f, decayColor_, 1.0f);
 
         for (int n = GuideNode; n < PlayheadNode; ++n)
             child(n)->markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);

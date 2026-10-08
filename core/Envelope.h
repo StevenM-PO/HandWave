@@ -13,7 +13,8 @@ namespace hw {
 //   Drawn - a hand-drawn curve spanning `timespan` seconds, cut into three
 //           segments at split1 and split2 (fractions of the width):
 //           attack [0, split1], decay [split1, split2], release [split2, 1].
-//           Sustain is a separate level, not part of the drawing.
+//           The sustain level is where the drawing is at split2 (the end of
+//           the decay), held for as long as the note is held.
 
 constexpr int kEnvelopePoints = 512;
 
@@ -31,7 +32,6 @@ struct DrawnTiming {
     double split1 = 1.0 / 3.0;
     double split2 = 2.0 / 3.0;
     double timespan = 1.0; // seconds for the whole drawing
-    double sustain = 0.6;  // level 0..1
 
     double attackSeconds() const { return split1 * timespan; }
     double decaySeconds() const { return (split2 - split1) * timespan; }
@@ -64,13 +64,15 @@ void renderAdsrToDrawing(const AdsrParams& adsr, EnvelopeCurve& curve, DrawnTimi
 
 // Produces the envelope sample by sample. Real-time safe (no allocation).
 //
-// Drawn mode joins the drawing to the live level with "correction ramps":
-// each segment is the drawing plus an offset that fades across the segment,
-// so the drawn detail is kept and the output never jumps:
-//   attack  starts from wherever the level is now (retrigger is click-free),
-//   decay   bends so it lands on the sustain level,
-//   release starts from the level at note-off and ends where the drawing ends
-//           (then fades to 0 in a few ms if the drawing doesn't).
+// Drawn mode follows the drawing, joined to the live level so the output
+// never jumps:
+//   attack  ramps from wherever the level is now onto the drawing (an offset
+//           that fades across the attack), so retriggering is click-free;
+//   decay   is the drawing, ending at the sustain level;
+//   release from sustain is the drawing. Released early (mid attack or
+//           decay), the drawn release is scaled to start from the current
+//           level, keeping its shape. Drawings that end above 0 fade out in
+//           a few ms.
 class Envelope {
 public:
     explicit Envelope(double sampleRate = 48000.0);

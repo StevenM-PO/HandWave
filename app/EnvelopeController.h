@@ -22,11 +22,11 @@ class EnvelopeController : public QObject {
     Q_PROPERTY(qreal decay READ decay WRITE setDecay NOTIFY settingsChanged)
     Q_PROPERTY(qreal sustain READ sustain WRITE setSustain NOTIFY settingsChanged)
     Q_PROPERTY(qreal release READ release WRITE setRelease NOTIFY settingsChanged)
-    // Drawn mode: divider positions (fractions of the width), total time, sustain.
+    // Drawn mode: divider positions (fractions of the width) and total time.
+    // (Its sustain level is the drawing's value at split2.)
     Q_PROPERTY(qreal split1 READ split1 WRITE setSplit1 NOTIFY settingsChanged)
     Q_PROPERTY(qreal split2 READ split2 WRITE setSplit2 NOTIFY settingsChanged)
     Q_PROPERTY(qreal timespan READ timespan WRITE setTimespan NOTIFY settingsChanged)
-    Q_PROPERTY(qreal drawnSustain READ drawnSustain WRITE setDrawnSustain NOTIFY settingsChanged)
     // Playhead (EnvelopeStage as int, seconds into it, level).
     Q_PROPERTY(int stage READ stage NOTIFY statusChanged)
     Q_PROPERTY(qreal stageSeconds READ stageSeconds NOTIFY statusChanged)
@@ -60,8 +60,6 @@ public:
     void setSplit2(qreal x);
     qreal timespan() const { return timing_.timespan; }
     void setTimespan(qreal seconds);
-    qreal drawnSustain() const { return timing_.sustain; }
-    void setDrawnSustain(qreal level);
 
     int stage() const { return int(status_.stage); }
     qreal stageSeconds() const { return status_.stageSeconds; }
