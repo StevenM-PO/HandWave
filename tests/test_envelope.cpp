@@ -90,6 +90,70 @@ TEST_CASE("Early release and retrigger never jump")
     REQUIRE(a2.front() >= r.back() - 0.001f); // continues up from the release level
 }
 
+TEST_CASE("Retriggering resumes the attack on its own curve")
+{
+    Envelope env(kRate);
+    AdsrParams p;
+    p.attack = 0.2;
+    p.release = 1.0;
+    env.setAdsr(p);
+
+    env.gateOn();
+    run(env, 0.3); // past the peak
+    env.gateOff();
+    run(env, 0.1); // part-way down the release
+    const float from = env.level();
+    REQUIRE(from > 0.2f);
+
+    env.gateOn();
+    const float first = env.next();
+    REQUIRE(first == Catch::Approx(from).margin(0.002)); // no jump
+    // It's on the attack curve: level matches the curve at its stage time.
+    REQUIRE(first == Catch::Approx(segmentCurve(env.stageSeconds() / p.attack, kAttackCurvature)).margin(0.002));
+    // And reaches the peak sooner than a full attack.
+    run(env, 0.2 * (1.0 - env.stageSeconds() / p.attack) + 0.002);
+    REQUIRE(env.stage() == EnvelopeStage::Decay);
+
+    // Rapid retriggers: each one starts on the curve, never above it.
+    for (int i = 0; i < 20; ++i) {
+        env.gateOff();
+        run(env, 0.01);
+        env.gateOn();
+        const float v = env.next();
+        REQUIRE(v == Catch::Approx(segmentCurve(env.stageSeconds() / p.attack, kAttackCurvature)).margin(0.002));
+        run(env, 0.01);
+    }
+}
+
+TEST_CASE("A drawn retrigger resumes where the drawn attack reaches the level")
+{
+    // Linear attack 0 -> 1 over the first third, then flat 0.6, linear release.
+    EnvelopeCurve curve = drawnCurve([](double x) {
+        if (x < 1.0 / 3.0)
+            return float(3.0 * x);
+        if (x < 2.0 / 3.0)
+            return 0.6f;
+        return float(0.6 * (1.0 - (x - 2.0 / 3.0) * 3.0));
+    });
+    DrawnTiming t;
+    t.timespan = 0.3; // 100 ms segments
+
+    Envelope env(kRate);
+    env.setMode(EnvelopeMode::Drawn);
+    env.setDrawn(&curve, t);
+    env.gateOn();
+    run(env, 0.25);
+    env.gateOff();
+    run(env, 0.02); // released from 0.6 to ~0.48
+    const float from = env.level();
+
+    env.gateOn();
+    const float first = env.next();
+    REQUIRE(first == Catch::Approx(from).margin(0.003));
+    // Linear attack: level L is reached at L of the way through it.
+    REQUIRE(env.stageSeconds() == Catch::Approx(from * 0.1).margin(0.002));
+}
+
 TEST_CASE("Drawn segment times are fractions of the timespan")
 {
     DrawnTiming t;

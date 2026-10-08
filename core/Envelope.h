@@ -64,10 +64,15 @@ void renderAdsrToDrawing(const AdsrParams& adsr, EnvelopeCurve& curve, DrawnTimi
 
 // Produces the envelope sample by sample. Real-time safe (no allocation).
 //
+// A note started while the level is above 0 (retriggered during a release)
+// resumes the attack from the point on its curve that matches the current
+// level, as analog envelopes do: no click, it stays on the curve, and it
+// reaches the peak sooner.
+//
 // Drawn mode follows the drawing, joined to the live level so the output
 // never jumps:
-//   attack  ramps from wherever the level is now onto the drawing (an offset
-//           that fades across the attack), so retriggering is click-free;
+//   attack  resumes where the drawn attack first reaches the current level
+//           (if it never does, the note goes straight to the decay);
 //   decay   is the drawing, ending at the sustain level;
 //   release from sustain is the drawing. Released early (mid attack or
 //           decay), the drawn release is scaled to start from the current
@@ -100,6 +105,9 @@ private:
     void enter(EnvelopeStage stage);
     double stageDuration() const;
     double drawnLevel(double u) const;
+    // Drawn attack position (0..1) where the drawing first reaches `level`,
+    // or a value above 1 if it never does.
+    double drawnAttackPositionFor(double level) const;
 
     double sampleRate_;
     double dt_;
@@ -112,6 +120,7 @@ private:
     double time_ = 0.0;       // seconds into the current stage
     float level_ = 0.0f;      // current output
     double startLevel_ = 0.0; // output when the stage began
+    double resumeU_ = 0.0;    // drawn attack: progress it resumed from
     float tailLevel_ = 0.0f;  // release end level being faded to 0
 };
 

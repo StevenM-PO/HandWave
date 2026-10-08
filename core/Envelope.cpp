@@ -98,7 +98,47 @@ void Envelope::enter(EnvelopeStage stage)
 
 void Envelope::gateOn()
 {
-    enter(EnvelopeStage::Attack); // from the current level: retrigger is legato
+    const double from = level_;
+    enter(EnvelopeStage::Attack);
+    resumeU_ = 0.0;
+    if (from <= 0.0)
+        return;
+
+    // Retrigger: resume the attack where its curve reaches the current level.
+    if (mode_ == EnvelopeMode::Adsr) {
+        // Invert segmentCurve(): the progress u at which it equals `from`.
+        const double k = kAttackCurvature;
+        const double level = std::min(from, 0.999999);
+        const double u = -std::log(1.0 - level * (1.0 - std::exp(-k))) / k;
+        time_ = u * stageDuration();
+        startLevel_ = 0.0; // the attack is its own curve from 0; we just start part-way
+        return;
+    }
+    const double u = drawnAttackPositionFor(from);
+    if (u > 1.0) {
+        enter(EnvelopeStage::Decay); // already above the whole drawn attack
+        return;
+    }
+    resumeU_ = u;
+    time_ = u * stageDuration();
+}
+
+double Envelope::drawnAttackPositionFor(double level) const
+{
+    if (curve_ == nullptr || timing_.split1 <= 0.0)
+        return 2.0;
+    const std::vector<float>& p = curve_->points;
+    const int last = static_cast<int>(p.size()) - 1;
+    const int attackEnd = std::min(last, static_cast<int>(timing_.split1 * last));
+    for (int j = 0; j <= attackEnd; ++j) {
+        if (p[j] < level)
+            continue;
+        double index = j;
+        if (j > 0 && p[j] > p[j - 1]) // interpolate the crossing
+            index = j - 1 + (level - p[j - 1]) / (p[j] - p[j - 1]);
+        return std::min(1.0, index / last / timing_.split1);
+    }
+    return 2.0;
 }
 
 void Envelope::gateOff()
@@ -127,10 +167,16 @@ double Envelope::drawnLevel(double u) const
     const EnvelopeCurve& c = *curve_;
     const double s1 = timing_.split1, s2 = timing_.split2;
     switch (stage_) {
-    case EnvelopeStage::Attack: // ramp from where we are onto the drawing
-        return c.sample(u * s1) + (startLevel_ - c.sample(0.0)) * (1.0 - u);
-    case EnvelopeStage::Decay:
-        return c.sample(s1 + u * (s2 - s1));
+    case EnvelopeStage::Attack: {
+        // The drawing, plus whatever small gap there was to the level we
+        // started from, faded out over the rest of the attack.
+        const double gap = startLevel_ - c.sample(resumeU_ * s1);
+        const double remaining = 1.0 - resumeU_;
+        const double fade = remaining > 1e-9 ? std::clamp((1.0 - u) / remaining, 0.0, 1.0) : 0.0;
+        return c.sample(u * s1) + gap * fade;
+    }
+    case EnvelopeStage::Decay: // the drawing (plus a fading gap if entered off it)
+        return c.sample(s1 + u * (s2 - s1)) + (startLevel_ - c.sample(s1)) * (1.0 - u);
     case EnvelopeStage::Release: {
         const double shape = c.sample(s2 + u * (1.0 - s2));
         const double drawnStart = c.sample(s2); // = sustain
