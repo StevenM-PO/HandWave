@@ -48,7 +48,10 @@ void EnvelopeCanvas::setEnvelope(EnvelopeController* envelope)
     envelope_ = envelope;
     if (envelope_) {
         connect(envelope_, &EnvelopeController::settingsChanged, this, &EnvelopeCanvas::settingsChanged);
-        connect(envelope_, &EnvelopeController::statusChanged, this, [this] { update(); });
+        connect(envelope_, &EnvelopeController::statusChanged, this, [this] {
+            qCDebug(lcEnvelope) << "canvas" << this << "update requested; visible" << isVisible();
+            update();
+        });
         envelope_->setCurve(samples());
         settingsChanged();
     }
@@ -196,6 +199,7 @@ void EnvelopeCanvas::endCustomDrag()
 
 QSGNode* EnvelopeCanvas::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 {
+    qCDebug(lcEnvelope) << "canvas" << this << "paint; stage" << (envelope_ ? envelope_->stage() : -1);
     QSGNode* root = oldNode;
     if (!root) {
         root = new QSGNode;

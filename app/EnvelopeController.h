@@ -3,10 +3,14 @@
 #include "AudioEngine.h"
 
 #include <QList>
+#include <QLoggingCategory>
 #include <QObject>
 #include <QTimer>
 #include <QtQml/qqmlregistration.h>
 #include <vector>
+
+// `handwave.envelope.debug` traces the playhead: status polls and repaints.
+Q_DECLARE_LOGGING_CATEGORY(lcEnvelope)
 
 // The settings of one envelope (amp or filter), shared by its page's knobs,
 // canvas and readouts, and passed on to the audio engine. Times are in
